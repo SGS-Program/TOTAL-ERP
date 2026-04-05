@@ -97,13 +97,21 @@ class UniversalAppBar extends StatelessWidget implements PreferredSizeWidget {
                 ),
                 onPressed: () {},
               ),
-              CircleAvatar(
-                radius: 16.r,
-                backgroundColor: tealColor.withOpacity(0.1),
-                child: Icon(
-                  Icons.person_rounded,
-                  color: tealColor,
-                  size: 20.sp,
+              GestureDetector(
+                onTap: () {
+                  final scaffoldState = Scaffold.maybeOf(context);
+                  if (scaffoldState?.hasDrawer ?? false) {
+                    scaffoldState?.openDrawer();
+                  }
+                },
+                child: CircleAvatar(
+                  radius: 16.r,
+                  backgroundColor: tealColor.withOpacity(0.1),
+                  child: Icon(
+                    Icons.person_rounded,
+                    color: tealColor,
+                    size: 20.sp,
+                  ),
                 ),
               ),
             ],

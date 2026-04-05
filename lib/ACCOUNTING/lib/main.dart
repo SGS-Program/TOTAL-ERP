@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
 
 void main() {
   runApp(const MyApp());
@@ -10,27 +12,48 @@ class MyApp extends StatelessWidget {
   // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Flutter Demo',
-      theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-      ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+    return ScreenUtilInit(
+      designSize: const Size(360, 690),
+      minTextAdapt: true,
+      splitScreenMode: true,
+      builder: (context, child) {
+        return MaterialApp(
+          title: 'Accounting ERP',
+          debugShowCheckedModeBanner: false,
+          theme: ThemeData(
+            useMaterial3: true,
+            colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF26A69A)),
+            textTheme: GoogleFonts.outfitTextTheme().copyWith(
+              titleLarge: GoogleFonts.outfit(
+                fontSize: 18.sp,
+                fontWeight: FontWeight.w900,
+                letterSpacing: -0.5,
+              ),
+              bodyMedium: GoogleFonts.outfit(
+                fontSize: 12.sp,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            appBarTheme: AppBarTheme(
+              backgroundColor: const Color(0xFF26A69A),
+              foregroundColor: Colors.white,
+              elevation: 0,
+              titleTextStyle: GoogleFonts.outfit(
+                fontSize: 18.sp,
+                fontWeight: FontWeight.w900,
+                color: Colors.white,
+                letterSpacing: -0.5,
+              ),
+            ),
+            bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+              selectedItemColor: Color(0xFF26A69A),
+              unselectedItemColor: Colors.grey,
+              backgroundColor: Colors.white,
+            ),
+          ),
+          home: const MyHomePage(title: 'Accounting Dashboard'),
+        );
+      },
     );
   }
 }

@@ -47,10 +47,11 @@ class CustomBottomBar extends StatelessWidget {
 
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFF26A69A),
+        color: Colors.white,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
+            color: Colors.black.withOpacity(0.08),
             blurRadius: 10,
             offset: const Offset(0, -2),
           ),
@@ -81,7 +82,7 @@ class CustomBottomBar extends StatelessWidget {
     double screenWidth,
   ) {
     bool isSelected = currentIndex == index;
-    final color = isSelected ? Colors.white : Colors.white.withOpacity(0.5);
+    final color = isSelected ? const Color(0xFF26A69A) : Colors.grey.shade400;
 
     return GestureDetector(
       onTap: () => _handleNavigation(context, index),
@@ -97,7 +98,7 @@ class CustomBottomBar extends StatelessWidget {
             style: TextStyle(
               color: color,
               fontSize: screenWidth * 0.03,
-              fontWeight: FontWeight.w400,
+              fontWeight: isSelected ? FontWeight.bold : FontWeight.w400,
             ),
           ),
         ],

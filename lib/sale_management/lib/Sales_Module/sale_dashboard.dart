@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../widgets/app_theme.dart';
-import '../widgets/app_drawer.dart';
+import '../widgets/drawer_screen.dart';
 import 'notification_screen.dart';
-import 'edit_profile_screen.dart';
+
 
 class DashboardPage extends StatefulWidget {
   final bool isEmbedded;
@@ -52,7 +52,7 @@ class _DashboardPageState extends State<DashboardPage> {
       value: AppTheme.statusBarTeal,
       child: Scaffold(
         backgroundColor: Colors.white,
-        drawer: widget.isEmbedded ? null : const AppDrawer(),
+        drawer: widget.isEmbedded ? null : const SaleManagementDrawer(),
         body: IndexedStack(
           index: _selectedIndex,
           children: _tabPages,
@@ -645,14 +645,7 @@ class _UserAvatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => const EditProfilePage(),
-          ),
-        );
-      },
+      onTap: () => Scaffold.of(context).openDrawer(),
       child: Container(
         width: 34,
         height: 34,

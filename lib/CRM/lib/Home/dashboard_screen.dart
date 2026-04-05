@@ -7,6 +7,8 @@ import 'package:crm/Meeting/add_meeting_screen.dart';
 import 'package:crm/Meeting/meeting_screen.dart';
 import 'package:crm/services/profile_service.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../Drawer/drawer_screen.dart';
 import '../Leads/enquiry_screen.dart';
 import '../Leads/referral_screen.dart';
@@ -114,12 +116,12 @@ class _DashboardScreenState extends State<DashboardScreen>
       appBar: widget.isEmbedded ? null : AppBar(
         backgroundColor: const Color(0xFF26A69A),
         elevation: 0,
-        title: const Text(
+        title: Text(
           'CRM Management',
-          style: TextStyle(
+          style: GoogleFonts.outfit(
             color: Colors.white,
             fontWeight: FontWeight.bold,
-            fontSize: 20,
+            fontSize: 18.sp,
           ),
         ),
         actions: [
@@ -128,10 +130,15 @@ class _DashboardScreenState extends State<DashboardScreen>
             onPressed: () {},
           ),
           const SizedBox(width: 8),
-          const CircleAvatar(
-            radius: 16,
-            backgroundColor: Colors.white24,
-            child: Icon(Icons.person, color: Colors.white, size: 20),
+          GestureDetector(
+            onTap: () {
+              Scaffold.of(context).openDrawer();
+            },
+            child: const CircleAvatar(
+              radius: 16,
+              backgroundColor: Colors.white24,
+              child: Icon(Icons.person, color: Colors.white, size: 20),
+            ),
           ),
           const SizedBox(width: 16),
         ],
@@ -277,6 +284,58 @@ class _DashboardScreenState extends State<DashboardScreen>
               ),
             ),
         ],
+      ),
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.08),
+              blurRadius: 10,
+              offset: const Offset(0, -2),
+            ),
+          ],
+        ),
+        child: BottomNavigationBar(
+          currentIndex: _currentIndex,
+          onTap: (index) {
+            setState(() {
+              _currentIndex = index;
+            });
+          },
+          type: BottomNavigationBarType.fixed,
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          selectedItemColor: const Color(0xFF26A69A),
+          unselectedItemColor: Colors.grey.shade400,
+          showSelectedLabels: true,
+          showUnselectedLabels: true,
+          selectedLabelStyle: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 11),
+          unselectedLabelStyle: GoogleFonts.outfit(fontSize: 11),
+          items: const [
+            BottomNavigationBarItem(
+              icon: Icon(Icons.dashboard_outlined),
+              activeIcon: Icon(Icons.dashboard_rounded),
+              label: 'Dashboard',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.history_outlined),
+              activeIcon: Icon(Icons.history_rounded),
+              label: 'Followup',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.groups_outlined),
+              activeIcon: Icon(Icons.groups_rounded),
+              label: 'Meetings',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.handshake_outlined),
+              activeIcon: Icon(Icons.handshake_rounded),
+              label: 'Deals',
+            ),
+          ],
+        ),
       ),
     );
   }

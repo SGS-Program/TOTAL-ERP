@@ -1,15 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:google_fonts/google_fonts.dart';
+import '../../Widget/drawer_screen.dart';
 import '../../Widget/custome_buttombar.dart';
 import '../LeadScreen/lead_management.dart';
 import 'product_screen.dart';
 import '../InvoiceScreen/invoice_dashboard.dart';
 import 'report_screen.dart';
-import '../DrawerScreen/drawer.dart';
 import '../PaymentScreen/payment.dart';
 
 class SalesDashboard extends StatefulWidget {
-  const SalesDashboard({super.key});
+  final bool isEmbedded;
+  const SalesDashboard({super.key, this.isEmbedded = false});
 
   @override
   State<SalesDashboard> createState() => _SalesDashboardState();
@@ -20,32 +22,35 @@ class _SalesDashboardState extends State<SalesDashboard> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FB),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF26A69A),
-        elevation: 0,
-        centerTitle: false,
-        title: const Text(
-          'Sales Management',
-          style: TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-            fontSize: 20,
-          ),
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.notifications_none, color: Colors.white),
-            onPressed: () {},
-          ),
-          const SizedBox(width: 8),
-          const CircleAvatar(
-            radius: 16,
-            backgroundColor: Colors.white24,
-            child: Icon(Icons.person, color: Colors.white, size: 20),
-          ),
-          const SizedBox(width: 16),
-        ],
-      ),
+      appBar: widget.isEmbedded
+          ? null
+          : AppBar(
+              backgroundColor: const Color(0xFF26A69A),
+              elevation: 0,
+              centerTitle: false,
+              title: Text(
+                'Sales Management',
+                style: GoogleFonts.outfit(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18.sp,
+                ),
+              ),
+              actions: [
+                IconButton(
+                  icon:
+                      const Icon(Icons.notifications_none, color: Colors.white),
+                  onPressed: () {},
+                ),
+                const SizedBox(width: 8),
+                const CircleAvatar(
+                  radius: 16,
+                  backgroundColor: Colors.white24,
+                  child: Icon(Icons.person, color: Colors.white, size: 20),
+                ),
+                const SizedBox(width: 16),
+              ],
+            ),
       body: SingleChildScrollView(
         padding: EdgeInsets.all(16.r),
         child: Column(
@@ -204,21 +209,18 @@ class _SalesDashboardState extends State<SalesDashboard> {
             ),
             SizedBox(height: 24.h),
 
-
-
             // Order Status
             _buildSectionContainer(
               'Order Status',
               const _OrderStatusChart(),
             ),
-            
-            
+
             SizedBox(height: 80.h), // Space for bottom bar
-         
           ],
         ),
       ),
-      drawer: const CustomDrawer(),
+      drawer: widget.isEmbedded ? null : const SalesDrawer(),
+      bottomNavigationBar: const CustomBottomBar(currentIndex: 0),
     );
   }
 
@@ -343,7 +345,6 @@ class _SalesDashboardState extends State<SalesDashboard> {
       ),
     );
   }
-
 }
 
 // ── Sales Overview Chart ────────────────────────────────────
@@ -387,11 +388,16 @@ class _SalesChartPainter extends CustomPainter {
   const _SalesChartPainter();
 
   static const List<_SalesBarData> _data = [
-    _SalesBarData(label: 'Mon',   value: 155, percent: '+12.5%', color: Color(0xFF00BFA5)),
-    _SalesBarData(label: 'Tue',   value: 100, percent: '+14.5%', color: Color(0xFF3F51B5)),
-    _SalesBarData(label: 'Wed',   value: 135, percent: '+8.5%',  color: Color(0xFF673AB7)),
-    _SalesBarData(label: 'Thurs', value: 195, percent: '195',    color: Color(0xFFFF6D00)),
-    _SalesBarData(label: 'Fri',   value: 155, percent: '-2.5%',  color: Color(0xFFFF9800)),
+    _SalesBarData(
+        label: 'Mon', value: 155, percent: '+12.5%', color: Color(0xFF00BFA5)),
+    _SalesBarData(
+        label: 'Tue', value: 100, percent: '+14.5%', color: Color(0xFF3F51B5)),
+    _SalesBarData(
+        label: 'Wed', value: 135, percent: '+8.5%', color: Color(0xFF673AB7)),
+    _SalesBarData(
+        label: 'Thurs', value: 195, percent: '195', color: Color(0xFFFF6D00)),
+    _SalesBarData(
+        label: 'Fri', value: 155, percent: '-2.5%', color: Color(0xFFFF9800)),
   ];
 
   static const double _maxValue = 240;
@@ -399,11 +405,11 @@ class _SalesChartPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    const leftPad  = 40.0;
+    const leftPad = 40.0;
     const bottomPad = 22.0;
-    const topPad   = 30.0;
+    const topPad = 30.0;
     const rightPad = 8.0;
-    final chartW = size.width  - leftPad - rightPad;
+    final chartW = size.width - leftPad - rightPad;
     final chartH = size.height - bottomPad - topPad;
 
     // ── Horizontal grid lines + Y-axis labels ──
@@ -413,7 +419,8 @@ class _SalesChartPainter extends CustomPainter {
 
     for (int i = 0; i < _yLabels.length; i++) {
       final y = topPad + chartH * i / (_yLabels.length - 1);
-      canvas.drawLine(Offset(leftPad, y), Offset(size.width - rightPad, y), gridPaint);
+      canvas.drawLine(
+          Offset(leftPad, y), Offset(size.width - rightPad, y), gridPaint);
       final tp = TextPainter(
         text: TextSpan(
           text: '${_yLabels[i]}',
@@ -443,7 +450,9 @@ class _SalesChartPainter extends CustomPainter {
         ..moveTo(leftPad - 4, topPad - 6)
         ..lineTo(leftPad, topPad - 15)
         ..lineTo(leftPad + 4, topPad - 6),
-      Paint()..color = Colors.black87..style = PaintingStyle.fill,
+      Paint()
+        ..color = Colors.black87
+        ..style = PaintingStyle.fill,
     );
 
     // X axis
@@ -458,19 +467,21 @@ class _SalesChartPainter extends CustomPainter {
         ..moveTo(size.width - rightPad + 2, topPad + chartH - 4)
         ..lineTo(size.width - rightPad + 11, topPad + chartH)
         ..lineTo(size.width - rightPad + 2, topPad + chartH + 4),
-      Paint()..color = Colors.black87..style = PaintingStyle.fill,
+      Paint()
+        ..color = Colors.black87
+        ..style = PaintingStyle.fill,
     );
 
     // ── Bars ──
     final slotW = chartW / _data.length;
-    final barW  = slotW * 0.44;
+    final barW = slotW * 0.44;
     final barCenters = <Offset>[];
 
     for (int i = 0; i < _data.length; i++) {
-      final bar  = _data[i];
-      final cx   = leftPad + slotW * i + slotW / 2;
+      final bar = _data[i];
+      final cx = leftPad + slotW * i + slotW / 2;
       final barH = chartH * bar.value / _maxValue;
-      final top  = topPad + chartH - barH;
+      final top = topPad + chartH - barH;
 
       canvas.drawRRect(
         RRect.fromRectAndCorners(
@@ -536,7 +547,12 @@ class _SalesChartPainter extends CustomPainter {
       }
 
       // Dot (white fill, dark border)
-      canvas.drawCircle(dot, 4.5, Paint()..color = Colors.white..style = PaintingStyle.fill);
+      canvas.drawCircle(
+          dot,
+          4.5,
+          Paint()
+            ..color = Colors.white
+            ..style = PaintingStyle.fill);
       canvas.drawCircle(
         dot,
         4.5,
@@ -591,10 +607,26 @@ class _OrderStatusPainter extends CustomPainter {
 
   // Rings: outer → inner
   static const _rings = [
-    _Ring(radius: 84, color: Color(0xFF00BCD4), label: 'Completed', labelColor: Color(0xFF00BCD4)),
-    _Ring(radius: 62, color: Color(0xFF8BC34A), label: 'Process',   labelColor: Color(0xFF8BC34A)),
-    _Ring(radius: 44, color: Color(0xFFFF5722), label: 'Pending',   labelColor: Color(0xFFFF9800)),
-    _Ring(radius: 28, color: Color(0xFFFFC107), label: 'Reject',    labelColor: Color(0xFFFF5722)),
+    _Ring(
+        radius: 84,
+        color: Color(0xFF00BCD4),
+        label: 'Completed',
+        labelColor: Color(0xFF00BCD4)),
+    _Ring(
+        radius: 62,
+        color: Color(0xFF8BC34A),
+        label: 'Process',
+        labelColor: Color(0xFF8BC34A)),
+    _Ring(
+        radius: 44,
+        color: Color(0xFFFF5722),
+        label: 'Pending',
+        labelColor: Color(0xFFFF9800)),
+    _Ring(
+        radius: 28,
+        color: Color(0xFFFFC107),
+        label: 'Reject',
+        labelColor: Color(0xFFFF5722)),
   ];
 
   @override
@@ -617,17 +649,17 @@ class _OrderStatusPainter extends CustomPainter {
     const callouts = [
       _Callout(ringIndex: 0, dy: -30), // Completed — top
       _Callout(ringIndex: 1, dy: -10), // Process
-      _Callout(ringIndex: 2, dy: 10),  // Pending
-      _Callout(ringIndex: 3, dy: 30),  // Reject — bottom
+      _Callout(ringIndex: 2, dy: 10), // Pending
+      _Callout(ringIndex: 3, dy: 30), // Reject — bottom
     ];
 
     for (final c in callouts) {
-      final ring   = _rings[c.ringIndex];
+      final ring = _rings[c.ringIndex];
       final startX = cx + ring.radius;
       final startY = cy + c.dy;
-      final endX   = size.width - 8;
-      final endY   = startY;
-      final color  = ring.labelColor;
+      final endX = size.width - 8;
+      final endY = startY;
+      final color = ring.labelColor;
 
       // Horizontal callout line
       canvas.drawLine(
@@ -643,12 +675,17 @@ class _OrderStatusPainter extends CustomPainter {
       canvas.drawCircle(
         Offset(endX - 6, endY),
         3.5,
-        Paint()..color = Colors.white..style = PaintingStyle.fill,
+        Paint()
+          ..color = Colors.white
+          ..style = PaintingStyle.fill,
       );
       canvas.drawCircle(
         Offset(endX - 6, endY),
         3.5,
-        Paint()..color = color..style = PaintingStyle.stroke..strokeWidth = 1.5,
+        Paint()
+          ..color = color
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.5,
       );
 
       // Text label — right-aligned, directly above the hollow-circle endpoint
@@ -692,5 +729,3 @@ class _Callout {
   final double dy;
   const _Callout({required this.ringIndex, required this.dy});
 }
-
-

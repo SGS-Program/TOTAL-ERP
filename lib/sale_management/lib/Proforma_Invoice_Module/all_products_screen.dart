@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../widgets/app_drawer.dart';
+import '../widgets/drawer_screen.dart';
 import 'payment_screen.dart';
 
 class CatalogProduct {
@@ -122,8 +122,21 @@ class _InvoiceCatalogScreenState extends State<InvoiceCatalogScreen> {
           'Invoice',
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
+        actions: [
+          Builder(
+            builder: (context) => IconButton(
+              icon: const CircleAvatar(
+                radius: 14,
+                backgroundColor: Colors.white24,
+                child: Icon(Icons.person, color: Colors.white, size: 18),
+              ),
+              onPressed: () => Scaffold.of(context).openDrawer(),
+            ),
+          ),
+          const SizedBox(width: 8),
+        ],
       ),
-      drawer: const AppDrawer(),
+      drawer: const SaleManagementDrawer(),
       body: Column(
         children: [
           // White Header Section

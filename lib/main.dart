@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:provider/provider.dart';
 import 'TOTAL ERP/splash/splash_screen.dart';
@@ -62,11 +63,75 @@ class MyApp extends StatelessWidget {
                       seedColor: const Color(0xFF26A69A),
                     ),
                     useMaterial3: true,
+                    textTheme: GoogleFonts.outfitTextTheme().copyWith(
+                      titleLarge: GoogleFonts.outfit(
+                        fontSize: 18.sp,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: -0.5,
+                      ),
+                      bodyMedium: GoogleFonts.outfit(
+                        fontSize: 12.sp,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    appBarTheme: AppBarTheme(
+                      backgroundColor: const Color(0xFF26A69A),
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      centerTitle: false,
+                      titleTextStyle: GoogleFonts.outfit(
+                        fontSize: 18.sp,
+                        fontWeight: FontWeight.w900,
+                        color: Colors.white,
+                        letterSpacing: -0.5,
+                      ),
+                      iconTheme: const IconThemeData(color: Colors.white),
+                    ),
+                    bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+                      backgroundColor: Color(0xFF26A69A),
+                      selectedItemColor: Colors.white,
+                      unselectedItemColor: Colors.white60,
+                      selectedLabelStyle: TextStyle(fontWeight: FontWeight.w600),
+                      type: BottomNavigationBarType.fixed,
+                      elevation: 10,
+                    ),
                   ),
                   darkTheme: ThemeData.dark(useMaterial3: true).copyWith(
                     colorScheme: ColorScheme.fromSeed(
                       seedColor: const Color(0xFF26A69A),
                       brightness: Brightness.dark,
+                    ),
+                    textTheme: GoogleFonts.outfitTextTheme().copyWith(
+                      titleLarge: GoogleFonts.outfit(
+                        fontSize: 18.sp,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: -0.5,
+                        color: Colors.white,
+                      ),
+                      bodyMedium: GoogleFonts.outfit(
+                        fontSize: 12.sp,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.white,
+                      ),
+                    ),
+                    appBarTheme: AppBarTheme(
+                      backgroundColor: const Color(0xFF26A69A),
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      centerTitle: false,
+                      titleTextStyle: GoogleFonts.outfit(
+                        fontSize: 18.sp,
+                        fontWeight: FontWeight.w900,
+                        color: Colors.white,
+                        letterSpacing: -0.5,
+                      ),
+                      iconTheme: const IconThemeData(color: Colors.white),
+                    ),
+                    bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+                      backgroundColor: Color(0xFF26A69A),
+                      selectedItemColor: Colors.white,
+                      unselectedItemColor: Colors.white60,
+                      type: BottomNavigationBarType.fixed,
                     ),
                   ),
                   home: const SplashScreen(),

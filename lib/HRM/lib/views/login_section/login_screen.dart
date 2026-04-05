@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:hrm/views/login_section/sign_in_sms.dart';
@@ -252,7 +252,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                           );
                         },
-                        icon: const Icon(
+                        icon: const FaIcon(
                           FontAwesomeIcons.whatsapp,
                           color: Colors.green,
                           size: 28,

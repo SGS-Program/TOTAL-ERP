@@ -296,7 +296,24 @@ class _AdminDashboardState extends State<AdminDashboard> {
           icon: const Icon(Icons.notifications_none, color: Colors.white),
           onPressed: () {},
         ),
-        SizedBox(width: 8.w),
+        const SizedBox(width: 8),
+        GestureDetector(
+          onTap: () => _scaffoldKey.currentState?.openDrawer(),
+          child: Container(
+            margin: const EdgeInsets.symmetric(vertical: 10),
+            padding: const EdgeInsets.all(2),
+            decoration: const BoxDecoration(
+              color: Colors.white24,
+              shape: BoxShape.circle,
+            ),
+            child: const CircleAvatar(
+              radius: 16,
+              backgroundColor: Colors.white30,
+              child: Icon(Icons.person, color: Colors.white, size: 20),
+            ),
+          ),
+        ),
+        const SizedBox(width: 16),
       ],
     );
   }

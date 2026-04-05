@@ -9,6 +9,7 @@ import 'settings_sub_screen.dart';
 import '../../utils/localization.dart';
 import '../../utils/constants/module_constants.dart';
 import '../../utils/widgets/universal_app_bar.dart';
+import '../../utils/widgets/main_drawer.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -21,6 +22,7 @@ class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
   Widget? _activeModule; // Persistent Module State
   String? _activeModuleTitle;
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   void _onModuleSelected(Widget moduleScreen, String moduleTitle) {
     setState(() {
@@ -67,8 +69,10 @@ class _HomeScreenState extends State<HomeScreen> {
           statusBarIconBrightness: Brightness.light,
         ),
         child: Scaffold(
+          key: _scaffoldKey,
           backgroundColor: Theme.of(context).scaffoldBackgroundColor,
           resizeToAvoidBottomInset: false,
+          drawer: const MainDrawer(),
           appBar: UniversalAppBar(
             title: _activeModule != null
                 ? AppLocalization.of(_activeModuleTitle ?? "")
@@ -114,11 +118,11 @@ class _HomeScreenState extends State<HomeScreen> {
               child: Container(
                 height: 72.h,
                 decoration: BoxDecoration(
-                  color: Theme.of(context).cardColor,
+                  color: Colors.white,
                   borderRadius: BorderRadius.circular(36.r),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.06),
+                      color: Colors.black.withOpacity(0.08),
                       blurRadius: 15,
                       offset: const Offset(0, 5),
                     ),
@@ -127,10 +131,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
-                    _buildNavItem(Icons.grid_view_rounded, 0),
-                    _buildNavItem(Icons.dashboard_customize_outlined, 1),
-                    _buildNavItem(Icons.notifications_none_rounded, 2),
-                    _buildNavItem(Icons.settings_outlined, 3),
+                    _buildNavItem(Icons.grid_view_rounded, 0, tealColor),
+                    _buildNavItem(Icons.dashboard_customize_outlined, 1, tealColor),
+                    _buildNavItem(Icons.notifications_none_rounded, 2, tealColor),
+                    _buildNavItem(Icons.settings_outlined, 3, tealColor),
                   ],
                 ),
               ),
@@ -141,9 +145,8 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildNavItem(IconData icon, int index) {
+  Widget _buildNavItem(IconData icon, int index, Color tealColor) {
     bool isActive = _selectedIndex == index;
-    const tealColor = Color(0xFF26A69A);
     
     return GestureDetector(
       onTap: () {
@@ -162,7 +165,7 @@ class _HomeScreenState extends State<HomeScreen> {
             curve: Curves.easeOutCubic,
             child: Icon(
               icon,
-              color: isActive ? tealColor : const Color(0xFFB0B0B0),
+              color: isActive ? tealColor : Colors.grey.shade400,
               size: 26.w,
             ),
           ),

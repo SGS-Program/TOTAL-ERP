@@ -214,7 +214,7 @@ class AttendanceTimelineScreen extends StatelessWidget {
                 Expanded(
                   child: Container(
                     width: 1.5.w,
-                    color: const Color(0xFF26A69A).withOpacity(0.5),
+                    color: const Color(0xFF26A69A).withValues(alpha: 0.5),
                   ),
                 ),
             ],
@@ -241,7 +241,7 @@ class AttendanceTimelineScreen extends StatelessWidget {
                     time,
                     style: GoogleFonts.poppins(
                       fontSize: 12.sp,
-                      color: Colors.black.withOpacity(0.7),
+                      color: Colors.black.withValues(alpha: 0.7),
                       fontWeight: FontWeight.w500,
                     ),
                   ),

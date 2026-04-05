@@ -3,6 +3,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:ecommerce/Widgets/drawer_screen.dart';
 
 class EcommerceDashboard extends StatefulWidget {
   final bool isEmbedded;
@@ -24,7 +25,7 @@ class _EcommerceDashboardState extends State<EcommerceDashboard> {
     return Scaffold(
       key: _scaffoldKey,
       backgroundColor: bgColor,
-      drawer: widget.isEmbedded ? null : _buildDrawer(context),
+      drawer: widget.isEmbedded ? null : const EcommerceDrawer(),
       appBar: widget.isEmbedded ? null : _buildAppBar(context, isDark),
       body: SingleChildScrollView(
         physics: const BouncingScrollPhysics(),
@@ -40,6 +41,54 @@ class _EcommerceDashboardState extends State<EcommerceDashboard> {
             _buildModulesGrid(context, isDark),
             _buildSectionTitle('Sales Analytics'),
             _buildAnalyticsCharts(context, isDark),
+          ],
+        ),
+      ),
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.08),
+              blurRadius: 10,
+              offset: const Offset(0, -2),
+            ),
+          ],
+        ),
+        child: BottomNavigationBar(
+          currentIndex: 0,
+          onTap: (index) {},
+          type: BottomNavigationBarType.fixed,
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          selectedItemColor: const Color(0xFF26A69A),
+          unselectedItemColor: Colors.grey.shade400,
+          showSelectedLabels: true,
+          showUnselectedLabels: true,
+          selectedLabelStyle: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 11),
+          unselectedLabelStyle: GoogleFonts.outfit(fontSize: 11),
+          items: const [
+            BottomNavigationBarItem(
+              icon: Icon(Icons.dashboard_outlined),
+              activeIcon: Icon(Icons.dashboard_rounded),
+              label: 'Dashboard',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.shopping_cart_outlined),
+              activeIcon: Icon(Icons.shopping_cart_rounded),
+              label: 'Orders',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.inventory_2_outlined),
+              activeIcon: Icon(Icons.inventory_2_rounded),
+              label: 'Products',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.people_outline_rounded),
+              activeIcon: Icon(Icons.people_rounded),
+              label: 'Customers',
+            ),
           ],
         ),
       ),
@@ -345,76 +394,6 @@ class _EcommerceDashboardState extends State<EcommerceDashboard> {
           chart,
         ],
       ),
-    );
-  }
-
-  Widget _buildDrawer(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Drawer(
-      backgroundColor: isDark ? const Color(0xFF121212) : Colors.white,
-      child: SafeArea(
-        child: Column(
-          children: [
-            Container(
-              padding: EdgeInsets.all(20.w),
-              color: primaryColor.withOpacity(0.05),
-              child: Row(
-                children: [
-                  Icon(Icons.shopping_bag_rounded, color: primaryColor, size: 30.w),
-                  SizedBox(width: 15.w),
-                  Text('E-COMMERCE', style: GoogleFonts.outfit(fontWeight: FontWeight.w900, fontSize: 18.sp, color: primaryColor)),
-                ],
-              ),
-            ),
-            Expanded(
-              child: ListView(
-                padding: EdgeInsets.symmetric(vertical: 10.h),
-                children: [
-                  _buildDrawerItem(Icons.dashboard_rounded, 'Dashboard', true),
-                  _buildDrawerItem(Icons.image_rounded, 'Banner Image', false),
-                  _buildDrawerItem(Icons.info_outline_rounded, 'About Us', false),
-                  _buildDrawerItem(Icons.verified_user_rounded, 'Our Certificates', false),
-                  _buildDrawerExpandableItem(Icons.shopping_cart_rounded, 'Orders'),
-                  _buildDrawerExpandableItem(Icons.people_rounded, 'Customers'),
-                  _buildDrawerItem(Icons.local_shipping_rounded, 'Shipping & Delivery', false),
-                  _buildDrawerItem(Icons.category_rounded, 'Category', false),
-                  _buildDrawerItem(Icons.headset_mic_rounded, 'Customer Care', false),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDrawerItem(IconData icon, String title, bool selected) {
-    return ListTile(
-      leading: Icon(icon, color: selected ? primaryColor : Colors.grey, size: 22.w),
-      title: Text(
-        title,
-        style: GoogleFonts.outfit(
-          color: selected ? primaryColor : Colors.grey.shade600,
-          fontWeight: selected ? FontWeight.bold : FontWeight.w600,
-          fontSize: 15.sp,
-        ),
-      ),
-      onTap: () => Navigator.of(context).pop(),
-    );
-  }
-
-  Widget _buildDrawerExpandableItem(IconData icon, String title) {
-    return ExpansionTile(
-      leading: Icon(icon, color: Colors.grey, size: 22.w),
-      title: Text(title, style: GoogleFonts.outfit(color: Colors.grey.shade600, fontWeight: FontWeight.w600, fontSize: 15.sp)),
-      iconColor: Colors.grey,
-      children: [
-        ListTile(
-          contentPadding: EdgeInsets.only(left: 70.w),
-          title: Text('View All', style: GoogleFonts.outfit(fontSize: 14.sp, color: Colors.grey)),
-          onTap: () {},
-        ),
-      ],
     );
   }
 }

@@ -21,11 +21,19 @@ class MyApp extends StatelessWidget {
           debugShowCheckedModeBanner: false,
           title: 'Sales ERP',
           theme: ThemeData(
-            colorScheme: ColorScheme.fromSeed(
-              seedColor: const Color(0xFF26A69A),
-            ),
-            textTheme: GoogleFonts.poppinsTextTheme(),
+            colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF26A69A)),
             useMaterial3: true,
+            textTheme: GoogleFonts.poppinsTextTheme(),
+            appBarTheme: const AppBarTheme(
+              backgroundColor: Color(0xFF26A69A),
+              foregroundColor: Colors.white,
+              elevation: 0,
+            ),
+            bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+              selectedItemColor: Color(0xFF26A69A),
+              unselectedItemColor: Colors.grey,
+              backgroundColor: Colors.white,
+            ),
           ),
           home: const SalesDashboard(),
         );

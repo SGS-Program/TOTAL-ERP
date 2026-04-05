@@ -54,6 +54,8 @@ dependencies:
     path: lib/SALES
   sale_management:
     path: lib/sale_management
+  crm_admin_app:
+    path: lib/crm_admin_app
   geolocator: ^14.0.2
   device_info_plus: ^12.3.0
   battery_plus: ^7.0.0

@@ -17,14 +17,14 @@ class CustomBottomNavBar extends StatelessWidget {
     return Container(
       height: 70.h,
       decoration: BoxDecoration(
-        color: const Color(0xFF26A69A),
+        color: Colors.white,
         borderRadius: BorderRadius.only(
           topLeft: Radius.circular(20.r),
           topRight: Radius.circular(20.r),
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
+            color: Colors.black.withOpacity(0.08),
             blurRadius: 10,
             offset: const Offset(0, -2),
           ),
@@ -44,6 +44,7 @@ class CustomBottomNavBar extends StatelessWidget {
 
   Widget _buildNavItem(int index, IconData icon, String label) {
     final isSelected = currentIndex == index;
+    final color = isSelected ? const Color(0xFF26A69A) : Colors.grey.shade400;
     return GestureDetector(
       onTap: () => onTap(index),
       child: Column(
@@ -51,14 +52,14 @@ class CustomBottomNavBar extends StatelessWidget {
         children: [
           Icon(
             icon,
-            color: isSelected ? Colors.white : Colors.white.withOpacity(0.6),
+            color: color,
             size: 24.sp,
           ),
           SizedBox(height: 4.h),
           Text(
             label,
             style: GoogleFonts.poppins(
-              color: isSelected ? Colors.white : Colors.white.withOpacity(0.6),
+              color: color,
               fontSize: 10.sp,
               fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
             ),
