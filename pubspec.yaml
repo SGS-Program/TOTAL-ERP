@@ -48,8 +48,8 @@ dependencies:
     path: lib/PURCHASE
   hrm:
     path: lib/hrm
-  hrm_admin_app:
-    path: lib/hrm_admin_app
+  # hrm_admin_app:
+  #   path: lib/hrm/hrm_admin_app
   sales:
     path: lib/SALES
   sale_management:

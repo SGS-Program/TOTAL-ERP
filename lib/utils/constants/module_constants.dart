@@ -15,13 +15,6 @@ final GlobalKey<ScaffoldState> moduleScaffoldKey = GlobalKey<ScaffoldState>();
 
 final List<ModuleItem> allModules = [
   ModuleItem(
-    title: 'HRM Admin',
-    imagePath: 'assets/images/hrm.png',
-    bgColor: Color(0xFFE3F2FD),
-    fallbackIcon: Icons.people_alt,
-    screenBuilder: (context) => const hrm_admin.AdminDashboard(isEmbedded: true),
-  ),
-  ModuleItem(
     title: 'HRM',
     imagePath: 'assets/images/hrm.png',
     bgColor: Color(0xFFE3F2FD),
@@ -33,7 +26,7 @@ final List<ModuleItem> allModules = [
     imagePath: 'assets/images/crm.png',
     bgColor: Color(0xFFE8F5E9),
     fallbackIcon: Icons.handshake,
-    screenBuilder: (context) => const crm_admin.DashboardScreen(isEmbedded: true),
+    screenBuilder: (context) => crm_admin.DashboardScreen(isEmbedded: true, scaffoldKey: moduleScaffoldKey),
   ),
   ModuleItem(
     title: 'Inventory',
@@ -46,7 +39,7 @@ final List<ModuleItem> allModules = [
     imagePath: 'assets/images/financials.png',
     bgColor: Color(0xFFF3E5F5),
     fallbackIcon: Icons.account_balance_wallet,
-    screenBuilder: (context) => const accounting.AccountingRoot(isEmbedded: true),
+    screenBuilder: (context) => accounting.AccountingRoot(isEmbedded: true, scaffoldKey: moduleScaffoldKey),
   ),
   ModuleItem(
     title: 'Sales',
@@ -67,7 +60,7 @@ final List<ModuleItem> allModules = [
     imagePath: 'assets/images/warehouse.png',
     bgColor: Color(0xFFE0F7FA),
     fallbackIcon: Icons.warehouse,
-    screenBuilder: (context) => const warehouse.WarehouseDashboard(isEmbedded: true),
+    screenBuilder: (context) => warehouse.WarehouseDashboard(isEmbedded: true, scaffoldKey: moduleScaffoldKey),
   ),
   ModuleItem(
     title: 'Manufacturing',
@@ -80,7 +73,7 @@ final List<ModuleItem> allModules = [
     imagePath: 'assets/images/inventory.png',
     bgColor: Color(0xFFE1F5FE),
     fallbackIcon: Icons.shopping_bag,
-    screenBuilder: (context) => const purchase.Dashboard(isEmbedded: true),
+    screenBuilder: (context) => purchase.Dashboard(isEmbedded: true, scaffoldKey: moduleScaffoldKey),
   ),
   ModuleItem(
     title: 'Dealer Mgmt',

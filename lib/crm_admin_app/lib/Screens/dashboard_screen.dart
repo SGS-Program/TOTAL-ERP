@@ -6,7 +6,8 @@ import 'package:crm_admin_app/Screens/menumanagement/menumanagement.dart';
 
 class DashboardScreen extends StatefulWidget {
   final bool isEmbedded;
-  const DashboardScreen({super.key, this.isEmbedded = false});
+  final GlobalKey<ScaffoldState>? scaffoldKey;
+  const DashboardScreen({super.key, this.isEmbedded = false, this.scaffoldKey});
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
@@ -18,10 +19,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final effectiveKey = widget.scaffoldKey ?? _scaffoldKey;
     return Scaffold(
-      key: _scaffoldKey,
+      key: effectiveKey,
       backgroundColor: const Color(0xFFF7F9FC),
-      drawer: widget.isEmbedded ? null : const CrmAdminDrawer(),
+      drawer: const CrmAdminDrawer(),
+      drawerEnableOpenDragGesture: !widget.isEmbedded,
       appBar: widget.isEmbedded ? null : AppBar(
         toolbarHeight: 70.h,
         backgroundColor: Colors.white,

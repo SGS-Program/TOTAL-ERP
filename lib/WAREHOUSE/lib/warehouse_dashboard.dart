@@ -6,7 +6,8 @@ import 'package:fl_chart/fl_chart.dart';
 
 class WarehouseDashboard extends StatefulWidget {
   final bool isEmbedded;
-  const WarehouseDashboard({super.key, this.isEmbedded = false});
+  final GlobalKey<ScaffoldState>? scaffoldKey;
+  const WarehouseDashboard({super.key, this.isEmbedded = false, this.scaffoldKey});
 
   @override
   State<WarehouseDashboard> createState() => _WarehouseDashboardState();
@@ -22,8 +23,12 @@ class _WarehouseDashboardState extends State<WarehouseDashboard> {
 
   @override
   Widget build(BuildContext context) {
+    final effectiveKey = widget.scaffoldKey ?? GlobalKey<ScaffoldState>();
     return Scaffold(
+      key: effectiveKey,
       backgroundColor: bgColor,
+      drawer: const SizedBox.shrink(), // Placeholder drawer if needed, but Warehouse doesn't have one defined yet
+      drawerEnableOpenDragGesture: !widget.isEmbedded,
       appBar: widget.isEmbedded ? null : _buildAppBar(),
       body: SingleChildScrollView(
         physics: const BouncingScrollPhysics(),

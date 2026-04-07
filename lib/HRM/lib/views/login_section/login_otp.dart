@@ -211,7 +211,6 @@ class _LoginOtpScreenState extends State<LoginOtpScreen> {
                     ),
                   ),
                 ),
-
                 SizedBox(height: height * 0.03),
               ],
             ),

@@ -3,9 +3,10 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
+import '../services/api_client.dart';
 
 class MarketingApi {
-  static const String baseUrl = "https://erpsmart.in/total/api/m_api/";
+  static final ApiClient _apiClient = ApiClient();
 
   // Marketing Check-In (Type: 2054)
   static Future<Map<String, dynamic>> checkIn({
@@ -15,22 +16,26 @@ class MarketingApi {
     required String lat,
     required String lng,
     required String type, // Default: 2054 from UI side request
+    String? token,
   }) async {
     try {
-      var request = http.MultipartRequest('POST', Uri.parse(baseUrl));
+      var request = http.MultipartRequest('POST', Uri.parse(ApiClient.baseUrl));
       request.fields.addAll({
         'cid': cid,
         'device_id': deviceId,
-        'id': uid, // Request says 'id: 40'
+        'uid': uid,
+        'id': uid, // Mirror for legacy backend compatibility
         'ln': lng,
         'lt': lat,
         'type': type,
       });
 
-      final streamedResponse = await request.send();
-      final response = await http.Response.fromStream(streamedResponse);
+      if (token != null && token.isNotEmpty) {
+        request.fields['token'] = token;
+      }
 
-      debugPrint("Marketing Check-In Response: ${response.body}");
+      final streamedResponse = await _apiClient.send(request);
+      final response = await http.Response.fromStream(streamedResponse);
 
       if (response.statusCode == 200) {
         return jsonDecode(response.body);
@@ -59,14 +64,16 @@ class MarketingApi {
     required String remarks,
     required String purposeOfVisitId,
     required String location,
+    String? token,
     File? attachment,
   }) async {
     try {
-      var request = http.MultipartRequest('POST', Uri.parse(baseUrl));
+      var request = http.MultipartRequest('POST', Uri.parse(ApiClient.baseUrl));
       request.fields.addAll({
         'cid': cid,
         'device_id': deviceId,
-        'uid': uid, // Request says 'uid: 20'
+        'uid': uid,
+        'id': uid, // Mirror for legacy backend compatibility
         'ln': lng,
         'lt': lat,
         'type': type,
@@ -77,32 +84,34 @@ class MarketingApi {
         'location': location,
       });
 
+      if (token != null && token.isNotEmpty) {
+        request.fields['token'] = token;
+      }
+
       if (attachment != null) {
         request.files.add(
           await http.MultipartFile.fromPath(
-            'attachments',
+            'attachments[]',
             attachment.path,
             contentType: MediaType('image', 'jpeg'),
           ),
         );
       }
 
-      final streamedResponse = await request.send();
+      final streamedResponse = await _apiClient.send(request);
       final response = await http.Response.fromStream(streamedResponse);
-
-      debugPrint("Marketing Check-Out Response: ${response.body}");
 
       if (response.statusCode == 200) {
         return jsonDecode(response.body);
       } else {
         return {
           "error": true,
-          "error_msg": "Server error: ${response.statusCode}",
+          "message": "Server error: ${response.statusCode}",
         };
       }
     } catch (e) {
       debugPrint("Marketing Check-Out Error: $e");
-      return {"error": true, "error_msg": e.toString()};
+      return {"error": true, "message": e.toString()};
     }
   }
 
@@ -121,6 +130,7 @@ class MarketingApi {
       final Map<String, String> body = {
         'cid': cid,
         'uid': uid,
+        'id': uid, // Mirror for backward compatibility
         'device_id': deviceId,
         'lt': lat,
         'ln': lng,
@@ -134,61 +144,56 @@ class MarketingApi {
 
       debugPrint("Marketing Enquiries Request Params: $body");
 
-      final response = await http.post(
-        Uri.parse(baseUrl),
-        body: body,
-      );
-
-      debugPrint("Marketing Enquiries Response: ${response.body}");
+      final response = await _apiClient.post(body);
 
       if (response.statusCode == 200) {
         return jsonDecode(response.body);
       } else {
         return {
           "error": true,
-          "error_msg": "Server error: ${response.statusCode}",
+          "error_msg": "Server returned status code ${response.statusCode}",
         };
       }
     } catch (e) {
-      debugPrint("Marketing Enquiries Error: $e");
+      debugPrint("Fetch Enquiries Error: $e");
       return {"error": true, "error_msg": e.toString()};
     }
   }
 
-  // Fetch Marketing History (Type: 2062)
+  // Fetch History (Type: 2062)
   static Future<Map<String, dynamic>> fetchHistory({
     required String uid,
     required String cid,
+    required String deviceId,
     required String lat,
     required String lng,
-    required String deviceId,
+    String? token,
     String type = "2062",
   }) async {
     try {
-      final response = await http.post(
-        Uri.parse(baseUrl),
-        body: {
-          'cid': cid,
-          'uid': uid,
-          'type': type,
-          'lt': lat,
-          'ln': lng,
-          'device_id': deviceId,
-        },
-      );
+      final body = {
+        'cid': cid,
+        'device_id': deviceId,
+        'uid': uid,
+        'id': uid, // Mirror for legacy backend compatibility
+        'ln': lng,
+        'lt': lat,
+        'type': type,
+        if (token != null) 'token': token,
+      };
 
-      debugPrint("Marketing History Response: ${response.body}");
+      final response = await _apiClient.post(body);
 
       if (response.statusCode == 200) {
         return jsonDecode(response.body);
       } else {
         return {
           "error": true,
-          "error_msg": "Server error: ${response.statusCode}",
+          "error_msg": "Server returned status code ${response.statusCode}",
         };
       }
     } catch (e) {
-      debugPrint("Marketing History Error: $e");
+      debugPrint("Fetch Marketing History Error: $e");
       return {"error": true, "error_msg": e.toString()};
     }
   }

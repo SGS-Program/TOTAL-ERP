@@ -435,6 +435,7 @@ class _SignupScreenState extends State<SignupScreen> {
         }
 
         Future.delayed(const Duration(milliseconds: 800), () {
+          if (!mounted || !context.mounted) return;
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(builder: (_) => const LoginScreen()),

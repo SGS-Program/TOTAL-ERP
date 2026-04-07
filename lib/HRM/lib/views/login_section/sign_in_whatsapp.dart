@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:hrm/views/login_section/login_screen.dart';
 import 'package:hrm/views/login_section/sign_in_sms.dart';
 import 'package:hrm/views/login_section/sign_up.dart';
@@ -116,6 +116,7 @@ class _WhatsappLoginState extends State<WhatsappLogin> {
                             final mobile = _emailController.text.trim();
 
                             if (mobile.isEmpty) {
+                              if (!context.mounted) return;
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(
                                   content: Text("Please enter WhatsApp number"),
@@ -125,6 +126,7 @@ class _WhatsappLoginState extends State<WhatsappLogin> {
                             }
 
                             if (mobile.length != 10) {
+                              if (!context.mounted) return;
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(
                                   content: Text(
@@ -136,6 +138,7 @@ class _WhatsappLoginState extends State<WhatsappLogin> {
                             }
 
                             if (!RegExp(r'^[0-9]+$').hasMatch(mobile)) {
+                              if (!context.mounted) return;
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(
                                   content: Text(
@@ -173,13 +176,21 @@ class _WhatsappLoginState extends State<WhatsappLogin> {
                                 final String cusId =
                                     response["cus_id"]?.toString() ?? "";
 
+                                // ✅ PERSIST ORIGINAL CUS_ID FOR SESSION
+                                if (cusId.isNotEmpty) {
+                                  await prefs.setString("login_cus_id", cusId);
+                                  debugPrint(
+                                    "PREF login_cus_id saved (WA) => $cusId",
+                                  );
+                                }
+
                                 if (response.containsKey("cid") &&
                                     response["cid"] != null) {
                                   final String cid = response["cid"].toString();
                                   await prefs.setString("cid", cid);
                                 }
 
-                                if (mounted) {
+                                if (mounted && context.mounted) {
                                   showModalBottomSheet(
                                     context: context,
                                     isScrollControlled: true,
@@ -194,7 +205,7 @@ class _WhatsappLoginState extends State<WhatsappLogin> {
                                   );
                                 }
                               } else {
-                                if (mounted) {
+                                if (mounted && context.mounted) {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(
                                       content: Text(
@@ -206,9 +217,9 @@ class _WhatsappLoginState extends State<WhatsappLogin> {
                                 }
                               }
                             } catch (e) {
-                              if (mounted) {
+                              if (mounted && context.mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text("Server Error")),
+                                  SnackBar(content: Text("Error: $e")),
                                 );
                               }
                             } finally {

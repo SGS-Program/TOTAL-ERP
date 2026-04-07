@@ -1,9 +1,12 @@
+import 'dart:io';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
+import '../services/api_client.dart';
 
 class AttendanceApi {
-  static const String baseUrl = "https://erpsmart.in/total/api/m_api/";
+  static final ApiClient _apiClient = ApiClient();
 
   /// Fetch Work Types (Type 2069)
   static Future<Map<String, dynamic>> fetchWorkTypes({
@@ -21,9 +24,7 @@ class AttendanceApi {
         "ln": lng,
       };
 
-      debugPrint("Fetch Work Types Request: $body");
-      final response = await http.post(Uri.parse(baseUrl), body: body);
-      debugPrint("Fetch Work Types Response: ${response.body}");
+      final response = await _apiClient.post(body);
 
       if (response.statusCode == 200) {
         return jsonDecode(response.body);
@@ -55,9 +56,7 @@ class AttendanceApi {
         "ln": lng,
       };
 
-      debugPrint("Fetch Transport Types Request: $body");
-      final response = await http.post(Uri.parse(baseUrl), body: body);
-      debugPrint("Fetch Transport Types Response: ${response.body}");
+      final response = await _apiClient.post(body);
 
       if (response.statusCode == 200) {
         return jsonDecode(response.body);
@@ -69,6 +68,130 @@ class AttendanceApi {
       }
     } catch (e) {
       debugPrint("Fetch Transport Types Error: $e");
+      return {"error": true, "error_msg": e.toString()};
+    }
+  }
+
+  /// Attendance Check-In (Type 2046)
+  static Future<Map<String, dynamic>> checkIn({
+    required String cid,
+    required String uid,
+    required String inTime,
+    required String loc,
+    required String workMode,
+    required String deviceId,
+    required String lat,
+    required String lng,
+    String? transportId,
+    String? token,
+    File? selfie,
+  }) async {
+    try {
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse("https://erpsmart.in/total/api/m_api/"),
+      );
+
+      request.fields.addAll({
+        "type": "2046",
+        "cid": cid,
+        "uid": uid,
+        "id": uid,
+        "in_time": inTime,
+        "loc": loc,
+        "wrk_mde": workMode,
+        "device_id": deviceId,
+        "lt": lat,
+        "ln": lng,
+        if (transportId != null && transportId.isNotEmpty)
+          "transport_id": transportId,
+        if (token != null && token.isNotEmpty) "token": token,
+      });
+
+      if (selfie != null) {
+        final ext = selfie.path.split('.').last.toLowerCase();
+        request.files.add(
+          await http.MultipartFile.fromPath(
+            'selfie',
+            selfie.path,
+            contentType: MediaType('image', ext == 'jpg' ? 'jpeg' : ext),
+          ),
+        );
+      }
+
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+      return jsonDecode(response.body);
+    } catch (e) {
+      debugPrint("Check-In API Error: $e");
+      return {"error": true, "error_msg": e.toString()};
+    }
+  }
+
+  /// Attendance Check-Out (Type 2047)
+  static Future<Map<String, dynamic>> checkOut({
+    required String cid,
+    required String uid,
+    required String outTime,
+    required String loc,
+    required String workMode,
+    required String deviceId,
+    required String lat,
+    required String lng,
+    String? transportId,
+    String? token,
+    File? selfie,
+    File? vehiclePhoto,
+  }) async {
+    try {
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse("https://erpsmart.in/total/api/m_api/"),
+      );
+
+      request.fields.addAll({
+        "type": "2047",
+        "cid": cid,
+        "uid": uid,
+        "id": uid,
+        "out_time": outTime,
+        "loc": loc,
+        "wrk_mde": workMode,
+        "device_id": deviceId,
+        "lt": lat,
+        "ln": lng,
+        if (transportId != null && transportId.isNotEmpty)
+          "transport_id": transportId,
+        if (token != null && token.isNotEmpty) "token": token,
+      });
+
+      if (selfie != null) {
+        final ext = selfie.path.split('.').last.toLowerCase();
+        request.files.add(
+          await http.MultipartFile.fromPath(
+            'selfie',
+            selfie.path,
+            contentType: MediaType('image', ext == 'jpg' ? 'jpeg' : ext),
+          ),
+        );
+      }
+
+      if (vehiclePhoto != null) {
+        final ext = vehiclePhoto.path.split('.').last.toLowerCase();
+        request.files.add(
+          await http.MultipartFile.fromPath(
+            'photo', // Vehicle photo key
+            vehiclePhoto.path,
+            contentType: MediaType('image', ext == 'jpg' ? 'jpeg' : ext),
+          ),
+        );
+      }
+
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+      return jsonDecode(response.body);
+    } catch (e) {
+      debugPrint("Check-Out API Error: $e");
       return {"error": true, "error_msg": e.toString()};
     }
   }

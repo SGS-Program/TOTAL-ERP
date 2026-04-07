@@ -1,10 +1,11 @@
-﻿import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
+import '../services/api_client.dart';
 
 class ExpenseRepo {
-  static const String baseUrl = "https://erpsmart.in/total/api/m_api/";
+  static final ApiClient _apiClient = ApiClient();
 
   // Add Expense API
   static Future<Map<String, dynamic>> addExpense({
@@ -17,14 +18,16 @@ class ExpenseRepo {
     required String lat,
     required String lng,
     required String purpose,
+    String? token,
     File? receiptImage,
   }) async {
     try {
-      var request = http.MultipartRequest('POST', Uri.parse(baseUrl));
+      var request = http.MultipartRequest('POST', Uri.parse(ApiClient.baseUrl));
 
       request.fields.addAll({
         "cid": cid,
         "uid": uid,
+        "id": uid, // Mirror for legacy backend compatibility
         "amount": amount,
         "description": description,
         "type": "2059",
@@ -33,6 +36,7 @@ class ExpenseRepo {
         "lt": lat,
         "ln": lng,
         "purpose": purpose,
+        if (token != null && token.isNotEmpty) "token": token,
       });
 
       if (receiptImage != null) {
@@ -41,9 +45,7 @@ class ExpenseRepo {
         );
       }
 
-      var streamedResponse = await request.send().timeout(
-        const Duration(seconds: 20),
-      );
+      var streamedResponse = await _apiClient.send(request);
       var response = await http.Response.fromStream(streamedResponse);
 
       if (response.statusCode == 200) {
@@ -69,22 +71,23 @@ class ExpenseRepo {
     required String deviceId,
     required String lat,
     required String lng,
+    String? token,
   }) async {
     try {
       final body = {
         "cid": cid,
         "uid": uid,
+        "id": uid, // Mirror for legacy backend compatibility
         "month": month,
         "year": year,
         "type": "2060",
         "device_id": deviceId,
         "lt": lat,
         "ln": lng,
+        if (token != null && token.isNotEmpty) "token": token,
       };
 
-      final response = await http
-          .post(Uri.parse(baseUrl), body: body)
-          .timeout(const Duration(seconds: 20));
+      final response = await _apiClient.post(body);
 
       if (response.statusCode == 200) {
         return jsonDecode(response.body);

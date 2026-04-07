@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:hrm/models/expense_api.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -22,6 +22,7 @@ class _ExpenseManagementScreenState extends State<ExpenseManagementScreen> {
   DateTime _selectedDate = DateTime.now();
   String _selectedFilter = 'Total';
   bool _isDateFilterActive = false;
+  Map<String, dynamic> _apiSummary = {};
 
   @override
   void initState() {
@@ -229,7 +230,9 @@ class _ExpenseManagementScreenState extends State<ExpenseManagementScreen> {
     try {
       final prefs = await SharedPreferences.getInstance();
       final uid =
+          prefs.getString('server_uid') ??
           prefs.getString('employee_table_id') ??
+          prefs.getString('login_cus_id') ??
           prefs.getInt('uid')?.toString() ??
           "";
       final cid = prefs.getString('cid') ?? "";
@@ -248,11 +251,14 @@ class _ExpenseManagementScreenState extends State<ExpenseManagementScreen> {
         deviceId: deviceId,
         lat: lat,
         lng: lng,
+        token: prefs.getString('token'),
       );
 
       if (!mounted) return;
 
-      if (response["success"] == true || response["error"] == false) {
+      if (response["success"] == true ||
+          response["error"] == false ||
+          response["error"] == "false") {
         final data = response["data"];
 
         List<dynamic> expenseList = [];
@@ -269,6 +275,16 @@ class _ExpenseManagementScreenState extends State<ExpenseManagementScreen> {
 
         setState(() {
           _expenses = expenseList;
+          if (_expenses.isNotEmpty) {
+            debugPrint("EXPENSE_DATA_SAMPLE => ${_expenses[0]}");
+          }
+          // Safely access summary from either data (if map) or response directly
+          _apiSummary = {};
+          if (data is Map && data["summary"] != null) {
+            _apiSummary = Map<String, dynamic>.from(data["summary"]);
+          } else if (response["summary"] != null) {
+            _apiSummary = Map<String, dynamic>.from(response["summary"]);
+          }
           _isLoading = false;
         });
       } else {
@@ -307,39 +323,87 @@ class _ExpenseManagementScreenState extends State<ExpenseManagementScreen> {
       }).toList();
     }
 
-    // 2. Calculate Summary based on Date Filtered List
+    // 2. Determine Summary
     double total = 0;
     double approved = 0;
     double pending = 0;
 
+    if (_apiSummary.isNotEmpty && !_isDateFilterActive) {
+      // Use API provided summary for total view if available
+      String totalStr = _apiSummary["total_amount"]?.toString() ?? "0";
+      total = double.tryParse(totalStr.replaceAll(",", "")) ?? 0;
+    }
+
+    // Default to local calculation for accuracy when filtering
+    double localTotal = 0;
+    double localApproved = 0;
+    double localPending = 0;
+
     for (var item in dateFilteredList) {
       String amountStr = item["amount"]?.toString() ?? "0";
-      double amt = double.tryParse(amountStr.replaceAll(",", "")) ?? 0;
-      total += amt;
+      double claimAmt = double.tryParse(amountStr.replaceAll(",", "")) ?? 0;
+      localTotal += claimAmt;
 
       String status = item["status"]?.toString().toLowerCase() ?? "0";
-      if (status == "1" || status.contains("approv")) {
-        approved += amt;
-      } else if (status == "0" || status.contains("pend")) {
-        pending += amt;
+      String approvedStr =
+          (item['approved_amt'] ?? item['approved_amount'])?.toString() ?? "0";
+      double apprAmt = double.tryParse(approvedStr.replaceAll(",", "")) ?? 0;
+
+      // Handle legacy data where status is 1 but approved_amt is 0
+      if ((status == "1" || status.contains("approv")) && apprAmt == 0) {
+        apprAmt = claimAmt;
+      }
+
+      localApproved += apprAmt;
+
+      // Pending is what remains to be approved for non-rejected items
+      if (status != "2" && !status.contains("reject")) {
+        localPending += (claimAmt - apprAmt);
       }
     }
+
+    total = localTotal;
+    approved = localApproved;
+    pending = localPending;
 
     final currentSummary = {
       "total": total,
       "approved": approved,
       "pending": pending,
+      "balance": total - approved,
     };
 
     // 3. Filter by Status Tab
     List<dynamic> finalDisplayList = dateFilteredList.where((item) {
       if (_selectedFilter == 'Total') return true;
+
       String statusRaw = item["status"]?.toString().toLowerCase() ?? "0";
+      double claim =
+          double.tryParse(
+            item['amount']?.toString().replaceAll(",", "") ?? "0",
+          ) ??
+          0;
+      double appr =
+          double.tryParse(
+            (item['approved_amt'] ?? item['approved_amount'])
+                    ?.toString()
+                    .replaceAll(",", "") ??
+                "0",
+          ) ??
+          0;
+
+      if ((statusRaw == "1" || statusRaw.contains("approv")) && appr == 0) {
+        appr = claim;
+      }
+
       if (_selectedFilter == 'Approved') {
-        return statusRaw == "1" || statusRaw.contains("approv");
+        return appr > 0;
       }
       if (_selectedFilter == 'Pending') {
-        return statusRaw == "0" || statusRaw.contains("pend");
+        // Show if not rejected and not fully approved
+        return statusRaw != "2" &&
+            !statusRaw.contains("reject") &&
+            appr < claim;
       }
       return true;
     }).toList();
@@ -518,6 +582,66 @@ class _ExpenseManagementScreenState extends State<ExpenseManagementScreen> {
                       ],
                     ),
 
+                    // ==================== NEW: APPROVAL DETAIL HIGHLIGHT ====================
+                    if (_selectedFilter == 'Approved') ...[
+                      const SizedBox(height: 24),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFE8F5E9).withValues(alpha: 0.5),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: const Color(
+                              0xFF4CAF50,
+                            ).withValues(alpha: 0.3),
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                const Icon(
+                                  Icons.verified_user_outlined,
+                                  color: Color(0xFF4CAF50),
+                                  size: 18,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  "Approval Detailed Stats",
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.black87,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                _detailStat(
+                                  "Applied Amt",
+                                  "\u20B9 ${currentSummary['total']}",
+                                ),
+                                _detailStat(
+                                  "Approved Amt",
+                                  "\u20B9 ${currentSummary['approved']}",
+                                ),
+                                _detailStat(
+                                  "Balance",
+                                  "\u20B9 ${currentSummary['balance']?.toStringAsFixed(2)}",
+                                  isBold: true,
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+
                     const SizedBox(height: 30),
 
                     if (finalDisplayList.isEmpty)
@@ -549,10 +673,28 @@ class _ExpenseManagementScreenState extends State<ExpenseManagementScreen> {
                             title = "Miscellaneous";
                           }
 
-                          String amountStr = item['amount']?.toString() ?? "0";
-                          // Remove commas if present
-                          String val = amountStr.replaceAll(",", "");
-                          String amount = "\u20B9 $val";
+                          // Normalize status to lowercase
+                          String statusRaw =
+                              item["status"]?.toString().toLowerCase() ?? "0";
+
+                          String claimAmountStr =
+                              item['amount']?.toString() ?? "0";
+                          String approvedAmountStr =
+                              item['approved_amt']?.toString() ??
+                              item['approved_amount']?.toString() ??
+                              "0";
+
+                          // If it was already approved but approved_amt is missing/zero, assume it matches the claim
+                          if ((statusRaw == "1" ||
+                                  statusRaw.contains("approv")) &&
+                              (double.tryParse(approvedAmountStr) ?? 0) <= 0) {
+                            approvedAmountStr = claimAmountStr;
+                          }
+
+                          String claimAmount =
+                              "\u20B9 ${claimAmountStr.replaceAll(",", "")}";
+                          String approvedAmount =
+                              "\u20B9 ${approvedAmountStr.replaceAll(",", "")}";
 
                           String dateStr =
                               item["expense_date"]?.toString() ?? "";
@@ -568,10 +710,6 @@ class _ExpenseManagementScreenState extends State<ExpenseManagementScreen> {
                               }
                             }
                           } catch (_) {}
-                          // Normalize status to lowercase
-                          String statusRaw =
-                              item["status"]?.toString().toLowerCase() ?? "0";
-
                           String statusText = "Pending";
                           Color statusColor = const Color(0xffF87000); // Orange
                           Color statusBgColor = const Color(
@@ -595,10 +733,10 @@ class _ExpenseManagementScreenState extends State<ExpenseManagementScreen> {
                           }
 
                           IconData icon = Icons.receipt_long;
-                          Color iconColor =
-                              Colors.red; // Default to Red for Pending/Others
+                          Color iconColor = const Color(
+                            0xFFD32F2F,
+                          ); // Default to Red
 
-                          // Simple icon logic based on title (keep icon, change color based on status)
                           final lowerTitle = title.toLowerCase();
                           if (lowerTitle.contains("food") ||
                               lowerTitle.contains("lunch") ||
@@ -615,13 +753,27 @@ class _ExpenseManagementScreenState extends State<ExpenseManagementScreen> {
                             icon = Icons.currency_rupee;
                           }
 
-                          // Override color based on status as per user request
-                          // "rupees symbol background color aprovel la muttum light green la kami pending ellamea red color la kami"
+                          // Override color based on status
                           if (statusText == "Approved") {
                             iconColor = const Color(0xFF4CAF50); // Green
                           } else {
                             iconColor = const Color(0xFFD32F2F); // Red
                           }
+
+                          double claimVal =
+                              double.tryParse(
+                                claimAmountStr.replaceAll(",", ""),
+                              ) ??
+                              0;
+                          double apprVal =
+                              double.tryParse(
+                                approvedAmountStr.replaceAll(",", ""),
+                              ) ??
+                              0;
+                          double balanceVal = claimVal - apprVal;
+
+                          bool isPartiallyPending =
+                              statusText == "Approved" && balanceVal > 0;
 
                           return Column(
                             children: [
@@ -631,10 +783,14 @@ class _ExpenseManagementScreenState extends State<ExpenseManagementScreen> {
                                 iconColor: iconColor,
                                 title: title,
                                 date: date,
-                                amount: amount,
+                                claimAmount: claimAmount,
+                                approvedAmount: approvedAmount,
+                                balanceAmount:
+                                    "\u20B9 ${balanceVal.toStringAsFixed(2)}",
                                 status: statusText,
                                 statusColor: statusColor,
                                 statusBgColor: statusBgColor,
+                                isPartiallyPending: isPartiallyPending,
                               ),
                               const SizedBox(height: 16),
                             ],
@@ -661,21 +817,30 @@ class _ExpenseManagementScreenState extends State<ExpenseManagementScreen> {
     Color activeColor,
     bool isSelected,
   ) {
-    // If selected, use activeColor for border and text.
-    // If not selected, use standard Dark Blue (0xFF1A237E) or Grey.
-
-    final color = isSelected ? activeColor : const Color(0xFF1A237E);
+    final color = isSelected ? activeColor : const Color(0xFF1A1C3D);
     final bgColor = isSelected
-        ? activeColor.withValues(alpha: 0.05)
+        ? activeColor.withValues(alpha: 0.08)
         : Colors.white;
 
     return Container(
-      height: 100, // Fixed height for uniformity
-      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+      height: 90,
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
       decoration: BoxDecoration(
-        border: Border.all(color: color, width: isSelected ? 2 : 1),
         color: bgColor,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isSelected ? activeColor : Colors.grey.shade300,
+          width: isSelected ? 2 : 1,
+        ),
+        boxShadow: isSelected
+            ? [
+                BoxShadow(
+                  color: activeColor.withValues(alpha: 0.15),
+                  blurRadius: 8,
+                  offset: const Offset(0, 4),
+                ),
+              ]
+            : [],
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -683,18 +848,21 @@ class _ExpenseManagementScreenState extends State<ExpenseManagementScreen> {
           Text(
             title,
             style: GoogleFonts.poppins(
-              fontSize: 16,
-              color: color,
-              fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+              fontSize: 13,
+              color: isSelected ? activeColor : Colors.grey.shade600,
+              fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
             ),
           ),
-          const SizedBox(height: 8),
-          Text(
-            amount,
-            style: GoogleFonts.poppins(
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-              color: color,
+          const SizedBox(height: 6),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              amount,
+              style: GoogleFonts.poppins(
+                fontSize: 15,
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
             ),
           ),
         ],
@@ -709,10 +877,13 @@ class _ExpenseManagementScreenState extends State<ExpenseManagementScreen> {
     required Color iconColor,
     required String title,
     required String date,
-    required String amount,
+    required String claimAmount,
+    required String approvedAmount,
+    required String balanceAmount,
     required String status,
     required Color statusColor,
     required Color statusBgColor,
+    bool isPartiallyPending = false,
   }) {
     return Container(
       padding: const EdgeInsets.all(16),
@@ -759,36 +930,136 @@ class _ExpenseManagementScreenState extends State<ExpenseManagementScreen> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Text(
-                amount,
+                "Claim: $claimAmount",
                 style: GoogleFonts.poppins(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: const Color(0xFF283593), // Dark Blue amount color
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.grey.shade700,
                 ),
               ),
-              const SizedBox(height: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 4,
-                ),
-                decoration: BoxDecoration(
-                  color: statusBgColor, // Light background
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text(
-                  status,
+              if (status == "Approved") ...[
+                const SizedBox(height: 2),
+                Text(
+                  "Appr: $approvedAmount",
                   style: GoogleFonts.poppins(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: statusColor, // Text color
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: const Color(0xFF2E7D32),
                   ),
                 ),
-              ),
+                if (isPartiallyPending)
+                  Text(
+                    "Bal: $balanceAmount",
+                    style: GoogleFonts.poppins(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.orange.shade700,
+                    ),
+                  ),
+              ] else ...[
+                const SizedBox(height: 2),
+                Text(
+                  "Pending",
+                  style: GoogleFonts.poppins(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.orange.shade700,
+                  ),
+                ),
+              ],
+              const SizedBox(height: 6),
+              if (status == "Approved")
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: isPartiallyPending
+                        ? Colors.orange.shade50
+                        : const Color(0xFFE8F5E9),
+                    borderRadius: BorderRadius.circular(50),
+                    border: Border.all(
+                      color: isPartiallyPending
+                          ? Colors.orange.shade700
+                          : const Color(0xFF2E7D32),
+                      width: 1,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        isPartiallyPending
+                            ? Icons.error_outline_rounded
+                            : Icons.check_circle,
+                        color: isPartiallyPending
+                            ? Colors.orange.shade700
+                            : const Color(0xFF2E7D32),
+                        size: 14,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        isPartiallyPending ? "Partial" : "Approved",
+                        style: GoogleFonts.poppins(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: isPartiallyPending
+                              ? Colors.orange.shade700
+                              : const Color(0xFF2E7D32),
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              else
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: statusBgColor,
+                    borderRadius: BorderRadius.circular(50),
+                    border: Border.all(color: statusColor, width: 1),
+                  ),
+                  child: Text(
+                    status,
+                    style: GoogleFonts.poppins(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: statusColor,
+                    ),
+                  ),
+                ),
             ],
           ),
         ],
       ),
+    );
+  }
+
+  Widget _detailStat(String label, String value, {bool isBold = false}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: GoogleFonts.poppins(
+            fontSize: 11,
+            color: Colors.grey.shade600,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        Text(
+          value,
+          style: GoogleFonts.poppins(
+            fontSize: 13,
+            fontWeight: isBold ? FontWeight.bold : FontWeight.w600,
+            color: isBold ? const Color(0xFF2E7D32) : Colors.black87,
+          ),
+        ),
+      ],
     );
   }
 }

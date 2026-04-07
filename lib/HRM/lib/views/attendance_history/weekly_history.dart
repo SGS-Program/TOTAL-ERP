@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'dart:convert';
 import 'dart:io';
@@ -34,7 +34,7 @@ class _AttendanceHistoryScreenState extends State<AttendanceHistoryScreen> {
 
   // API Params
   String cid = "";
-  int uid = 0;
+  String uid = ""; // Changed to String
   String? deviceId;
   String userName = "User";
   bool isCheckedIn = false;
@@ -57,7 +57,10 @@ class _AttendanceHistoryScreenState extends State<AttendanceHistoryScreen> {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
       cid = prefs.getString('cid') ?? "";
-      uid = prefs.getInt('uid') ?? 0;
+      uid = prefs.getString('login_cus_id') ??
+          prefs.getString('server_uid') ??
+          prefs.getInt('uid')?.toString() ??
+          "";
       userName = prefs.getString('name') ?? "User";
       isCheckedIn = prefs.getBool('isCheckedIn') ?? false;
     });
@@ -102,6 +105,9 @@ class _AttendanceHistoryScreenState extends State<AttendanceHistoryScreen> {
       // If week crosses months, might need two calls or API handles date range?
       // Assuming API handles "month" param.
 
+      final prefs = await SharedPreferences.getInstance();
+      final String? sessionToken = prefs.getString('token');
+
       final body = {
         "type": "2064",
         "cid": cid,
@@ -109,9 +115,11 @@ class _AttendanceHistoryScreenState extends State<AttendanceHistoryScreen> {
         "device_id": deviceId ?? "123456",
         "lt": position?.latitude.toString() ?? "0.0",
         "ln": position?.longitude.toString() ?? "0.0",
+        "report_type": "attendance",
+        if (sessionToken != null && sessionToken.isNotEmpty)
+          "token": sessionToken,
         "month": startOfWeek.month.toString(),
         "year": startOfWeek.year.toString(),
-        // Potentially add "from_date": startOfWeek... if API supports
       };
 
       debugPrint("Weekly Request: $body");
@@ -162,27 +170,32 @@ class _AttendanceHistoryScreenState extends State<AttendanceHistoryScreen> {
     final teal = const Color(0xff00A79D);
 
     String dateRange =
-        "${DateFormat('MMM d').format(startOfWeek)} â€“ ${DateFormat('MMM d, y').format(endOfWeek)}";
+        "${DateFormat('MMM d').format(startOfWeek)} – ${DateFormat('MMM d, y').format(endOfWeek)}";
 
     // Calculate Weekly Progress locally based on attendanceList
     // Get records within this week range
     int daysPresent = 0;
     int daysPassedInWeek = 0;
 
-    // Days present
+    // Days present: count records within this week that have both in+out time
+    bool _isTimeValid(dynamic time) {
+      if (time == null) return false;
+      String t = time.toString().trim().toLowerCase();
+      return t.isNotEmpty && t != "null" && t != "00:00:00" && t != "00:00";
+    }
+
     daysPresent = attendanceList.where((record) {
       String dateStr = record["date"] ?? "";
       if (dateStr.isEmpty) return false;
       DateTime? rd = DateTime.tryParse(dateStr);
       if (rd == null) return false;
-      // Check range
+      // Check it's within this week
       if (rd.isBefore(startOfWeek) ||
           rd.isAfter(endOfWeek.add(const Duration(days: 1)))) {
         return false;
       }
-
-      String status = record["status"]?.toString().toLowerCase() ?? "";
-      return status.contains("present") || status.contains("check out");
+      // Count only days with both check-in AND check-out (approved/completed)
+      return _isTimeValid(record["in_time"]) && _isTimeValid(record["out_time"]);
     }).length;
 
     // Days passed in week (denominator)
@@ -677,7 +690,7 @@ class _AttendanceHistoryScreenState extends State<AttendanceHistoryScreen> {
                     Padding(
                       padding: const EdgeInsets.only(top: 6),
                       child: Text(
-                        "⏱️ Overtime: $overtime",
+                        "?? Overtime: $overtime",
                         style: const TextStyle(
                           color: Colors.deepOrange,
                           fontSize: 12,

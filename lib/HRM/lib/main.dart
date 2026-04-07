@@ -1,11 +1,9 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'services/notification_service.dart';
 import 'services/device_service.dart';
 import 'views/splash_screen.dart';
-
 import 'firebase_options.dart';
 
 void main() async {
@@ -30,37 +28,9 @@ class MyApp extends StatelessWidget {
           debugShowCheckedModeBanner: false,
           title: 'HRM',
           theme: ThemeData(
-            useMaterial3: true,
-            colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF26A69A)),
+            useMaterial3: false,
             primaryColor: const Color(0xFF26A69A),
             scaffoldBackgroundColor: Colors.white,
-            textTheme: GoogleFonts.outfitTextTheme().copyWith(
-              titleLarge: GoogleFonts.outfit(
-                fontSize: 18.sp,
-                fontWeight: FontWeight.w900,
-                letterSpacing: -0.5,
-              ),
-              bodyMedium: GoogleFonts.outfit(
-                fontSize: 12.sp,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            appBarTheme: AppBarTheme(
-              backgroundColor: const Color(0xFF26A69A),
-              foregroundColor: Colors.white,
-              elevation: 0,
-              titleTextStyle: GoogleFonts.outfit(
-                fontSize: 18.sp,
-                fontWeight: FontWeight.w900,
-                color: Colors.white,
-                letterSpacing: -0.5,
-              ),
-            ),
-            bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-              selectedItemColor: Color(0xFF26A69A),
-              unselectedItemColor: Colors.grey,
-              backgroundColor: Colors.white,
-            ),
           ),
           home: const SplashScreen(),
         );
@@ -68,4 +38,3 @@ class MyApp extends StatelessWidget {
     );
   }
 }
-

@@ -7,13 +7,12 @@ import 'package:dotted_border/dotted_border.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:intl/intl.dart';
-import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'dart:convert';
-import 'package:http_parser/http_parser.dart';
-import '../../services/face_detector_service.dart';
-import '../../models/attendance_api.dart';
+import 'package:hrm/services/face_detector_service.dart';
+import 'package:hrm/models/attendance_api.dart';
+import 'package:hrm/views/login_section/login_screen.dart';
 
 class CheckInVerificationScreen extends StatefulWidget {
   const CheckInVerificationScreen({super.key});
@@ -31,8 +30,9 @@ class _CheckInVerificationScreenState extends State<CheckInVerificationScreen> {
 
   String? selectedMode; // Changed to nullable and null by default
   bool isLoading = false;
-  int? uid;
+  String uid = "";
   String? cid;
+  String? serverUidString;
   String? deviceId;
   Position? currentPosition;
 
@@ -122,7 +122,7 @@ class _CheckInVerificationScreenState extends State<CheckInVerificationScreen> {
       final iosInfo = await deviceInfo.iosInfo;
       deviceId = iosInfo.identifierForVendor;
     }
-    setState(() {});
+    if (mounted) setState(() {});
   }
 
   Future<void> _fetchLocationAndTime() async {
@@ -140,7 +140,9 @@ class _CheckInVerificationScreenState extends State<CheckInVerificationScreen> {
     try {
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
-        setState(() => locationController.text = "Location services disabled");
+        if (mounted) {
+          setState(() => locationController.text = "Location services disabled");
+        }
         return;
       }
 
@@ -148,15 +150,19 @@ class _CheckInVerificationScreenState extends State<CheckInVerificationScreen> {
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
         if (permission == LocationPermission.denied) {
-          setState(() => locationController.text = "Permission denied");
+          if (mounted) {
+            setState(() => locationController.text = "Permission denied");
+          }
           return;
         }
       }
 
       if (permission == LocationPermission.deniedForever) {
-        setState(
-          () => locationController.text = "Permission permanently denied",
-        );
+        if (mounted) {
+          setState(
+            () => locationController.text = "Permission permanently denied",
+          );
+        }
         return;
       }
 
@@ -183,27 +189,33 @@ class _CheckInVerificationScreenState extends State<CheckInVerificationScreen> {
           address = address.substring(0, address.length - 1).trim();
         }
 
-        setState(() {
-          locationController.text = address.isEmpty
-              ? "Location found"
-              : address;
-        });
+        if (mounted) {
+          setState(() {
+            locationController.text = address.isEmpty ? "Location found" : address;
+          });
+        }
       } else {
-        setState(() => locationController.text = "Address not found");
+        if (mounted) setState(() => locationController.text = "Address not found");
       }
     } catch (e) {
       debugPrint("LOCATION ERROR => $e");
-      setState(() => locationController.text = "Error getting location");
+      if (mounted) setState(() => locationController.text = "Error getting location");
     }
   }
 
   Future<void> _loadUid() async {
     final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      uid = prefs.getInt('uid') ?? 4;
-      cid = prefs.getString('cid') ?? "";
-    });
-    debugPrint("AUTO LOADED UID: $uid, CID: $cid");
+    if (mounted) {
+      setState(() {
+        uid = prefs.getString('login_cus_id') ??
+              prefs.getString('server_uid') ??
+              prefs.getString('employee_table_id') ?? 
+              prefs.getInt('uid')?.toString() ?? "";
+        cid = prefs.getString('cid') ?? "";
+        serverUidString = prefs.getString('server_uid');
+      });
+    }
+    debugPrint("AUTO LOADED UID: $uid, CID: $cid, SERVER_UID: $serverUidString");
   }
 
   @override
@@ -323,7 +335,7 @@ class _CheckInVerificationScreenState extends State<CheckInVerificationScreen> {
 
   Future<void> _submit() async {
     String? errorMsg;
-    if (uid == null) {
+    if (uid.isEmpty) {
       errorMsg = 'User ID not found. Please log in again.';
     } else if (inTimeController.text.isEmpty) {
       errorMsg = 'Please select In Time';
@@ -343,14 +355,6 @@ class _CheckInVerificationScreenState extends State<CheckInVerificationScreen> {
       errorMsg = 'Please take a selfie for verification';
     }
 
-    final prefs = await SharedPreferences.getInstance();
-    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
-    final lastCheckIn = prefs.getString('last_checkin_date');
-
-    if (lastCheckIn == today) {
-      errorMsg = 'You have already checked in for today.';
-    }
-
     if (errorMsg != null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(errorMsg), backgroundColor: Colors.red),
@@ -361,10 +365,8 @@ class _CheckInVerificationScreenState extends State<CheckInVerificationScreen> {
     setState(() => isLoading = true);
 
     try {
-      final request = http.MultipartRequest(
-        'POST',
-        Uri.parse("https://erpsmart.in/total/api/m_api/"),
-      );
+      final prefs = await SharedPreferences.getInstance();
+      final String? token = prefs.getString('token');
 
       String transportId = "";
       if (selectedVehicleMode != null) {
@@ -377,47 +379,21 @@ class _CheckInVerificationScreenState extends State<CheckInVerificationScreen> {
         }
       }
 
-      request.fields.addAll({
-        "type": "2046",
-        "cid": cid ?? "",
-        "uid": uid.toString(),
-        "in_time": inTimeController.text,
-        "loc": locationController.text,
-        "wrk_mde": selectedMode?.toLowerCase() ?? "",
-        "device_id": deviceId ?? "123456",
-        "lt": currentPosition?.latitude.toString() ?? "0.0",
-        "ln": currentPosition?.longitude.toString() ?? "0.0",
-        "transport_id": transportId,
-      });
-
-      if (_vehicleImage != null) {
-        final String vExt = _vehicleImage!.path.split('.').last.toLowerCase();
-        request.files.add(
-          await http.MultipartFile.fromPath(
-            'photo', // Updated key to match user's example
-            _vehicleImage!.path,
-            contentType: MediaType('image', vExt == 'jpg' ? 'jpeg' : vExt),
-          ),
-        );
-      }
-
-      final String extension = _image!.path.split('.').last.toLowerCase();
-      request.files.add(
-        await http.MultipartFile.fromPath(
-          'selfie',
-          _image!.path,
-          contentType: MediaType(
-            'image',
-            extension == 'jpg' ? 'jpeg' : extension,
-          ),
-        ),
+      final responseData = await AttendanceApi.checkIn(
+        cid: cid ?? "21472147",
+        uid: uid,
+        inTime: inTimeController.text,
+        loc: locationController.text,
+        workMode: selectedMode?.toLowerCase() ?? "",
+        deviceId: deviceId ?? "123456",
+        lat: currentPosition?.latitude.toString() ?? "0.0",
+        lng: currentPosition?.longitude.toString() ?? "0.0",
+        transportId: transportId,
+        token: token,
+        selfie: _image,
       );
 
-      final streamedResponse = await request.send();
-      final response = await http.Response.fromStream(streamedResponse);
-      final responseData = jsonDecode(response.body);
-
-      debugPrint("CHECK-IN RESPONSE => ${response.body}");
+      debugPrint("CHECK-IN RESPONSE => $responseData");
 
       final bool isSuccess =
           responseData["error"] == false ||
@@ -433,9 +409,13 @@ class _CheckInVerificationScreenState extends State<CheckInVerificationScreen> {
           );
 
       if (isSuccess) {
-        // Persist check-in status and save new token if provided
-        final prefs = await SharedPreferences.getInstance();
         final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+        final bool isMarketing = selectedMode?.toLowerCase() == 'marketing';
+        await prefs.setBool('marketing_attendance_mode', isMarketing);
+        if (!isMarketing) {
+          await prefs.setBool('has_done_marketing_today', false);
+        }
+
         await prefs.setBool('isCheckedIn', true);
         await prefs.setString('last_checkin_date', today);
 
@@ -444,7 +424,6 @@ class _CheckInVerificationScreenState extends State<CheckInVerificationScreen> {
             responseData["token"] ?? responseData["data"]?["token"];
         if (newToken != null && newToken.isNotEmpty) {
           await prefs.setString('token', newToken);
-          debugPrint("Check-in: New Session Token Saved => $newToken");
         }
 
         if (mounted) {
@@ -459,12 +438,10 @@ class _CheckInVerificationScreenState extends State<CheckInVerificationScreen> {
           Navigator.pop(context, true);
         }
       } else {
+        final String errorMsg = responseData["message"] ?? "Check-in failed";
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(responseData["message"] ?? 'Check-in failed'),
-              backgroundColor: Colors.red,
-            ),
+            SnackBar(content: Text(errorMsg), backgroundColor: Colors.red),
           );
         }
       }
@@ -484,6 +461,7 @@ class _CheckInVerificationScreenState extends State<CheckInVerificationScreen> {
       }
     }
   }
+
 
   bool _isVehiclePhotoRequired() {
     if (selectedVehicleMode == null) return false;
@@ -533,9 +511,11 @@ class _CheckInVerificationScreenState extends State<CheckInVerificationScreen> {
             await prefs.setString('checkin_face_profile', jsonEncode(profile));
           }
 
-          setState(() {
-            _image = imageFile;
-          });
+          if (mounted) {
+            setState(() {
+              _image = imageFile;
+            });
+          }
 
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
@@ -827,9 +807,11 @@ class _CheckInVerificationScreenState extends State<CheckInVerificationScreen> {
     );
 
     if (photo != null) {
-      setState(() {
-        _vehicleImage = File(photo.path);
-      });
+      if (mounted) {
+        setState(() {
+          _vehicleImage = File(photo.path);
+        });
+      }
     }
   }
 }

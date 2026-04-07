@@ -176,14 +176,16 @@ class _LeaveFormState extends State<LeaveForm> {
     super.dispose();
   }
 
-  /// 🔥 ONLY READ STORED EMPLOYEE ID
+  /// 🔥 STANDARDIZED UID LOADING
   Future<void> _loadEmployeeId() async {
     final prefs = await SharedPreferences.getInstance();
-    employeeTableId = prefs.getString("employee_table_id");
+    employeeTableId =
+        prefs.getString('login_cus_id') ??
+        prefs.getString('employee_table_id') ??
+        prefs.getInt('uid')?.toString() ??
+        "";
 
-    // DEBUG (optional – can remove later)
-    debugPrint("LEAVE SCREEN EMP ID => $employeeTableId");
-
+    debugPrint("LEAVE SCREEN STANDARDIZED UID => $employeeTableId");
     _employeeCompleter.complete();
   }
 
@@ -272,14 +274,17 @@ class _LeaveFormState extends State<LeaveForm> {
       var request = http.MultipartRequest("POST", Uri.parse(baseUrl));
       request.fields['type'] = '2043';
       request.fields['cid'] = prefs.getString('cid') ?? "";
-      request.fields['uid'] = employeeTableId!;
+      request.fields['uid'] =
+          employeeTableId!; // Standardized UID (Priority: login_cus_id)
+      request.fields['id'] =
+          employeeTableId!; // Alias for backward compatibility
       request.fields['leave_type'] = leaveType!;
       request.fields['leave_start_date'] = _formatDate(fromDate!);
       request.fields['leave_end_date'] = _formatDate(toDate!);
       request.fields['reason'] = reason!;
       request.fields['device_id'] = prefs.getString('device_id') ?? "";
-      request.fields['lt'] = "143.23"; // Dummy coords if not available
-      request.fields['ln'] = "123.12";
+      request.fields['lt'] = prefs.getDouble('lat')?.toString() ?? "";
+      request.fields['ln'] = prefs.getDouble('lng')?.toString() ?? "";
 
       if (attachment != null) {
         request.files.add(

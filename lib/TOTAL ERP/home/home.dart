@@ -10,6 +10,7 @@ import '../../utils/localization.dart';
 import '../../utils/constants/module_constants.dart';
 import '../../utils/widgets/universal_app_bar.dart';
 import '../../utils/widgets/main_drawer.dart';
+import 'package:hrm/views/home/settings.dart' as hrm_settings;
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -94,6 +95,14 @@ class _HomeScreenState extends State<HomeScreen> {
                             : AppLocalization.of('Manage preferences and configuration')))),
             showBackButton: _activeModule != null,
             onBackTap: _activeModule != null ? _clearActiveModule : null,
+            onProfileTap: _activeModuleTitle == 'HRM' 
+                ? () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const hrm_settings.SettingsScreen()),
+                    );
+                  }
+                : null,
             isDark: isDark,
           ),
           body: Column(

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../models/ticket_api.dart';
-import '../home/view_ticket_screen.dart';
 
 class TicketRaise extends StatefulWidget {
   const TicketRaise({super.key});
@@ -18,7 +17,6 @@ class _TicketRaiseState extends State<TicketRaise> {
   bool isLoading = false;
   bool isDeptsLoading = true; // New loading state for depts
 
-  final List<Map<String, dynamic>> _myTickets = [];
   List<String> departmentList = []; // Made dynamic
 
   @override
@@ -141,19 +139,7 @@ class _TicketRaiseState extends State<TicketRaise> {
     setState(() => isLoading = false);
 
     if (result["success"] == true) {
-      // Pass empty list to ViewTicketRaisingScreen, as it will fetch its own tickets now
-      // Or we can add the new one artificially if we want immediate feedback,
-      // but better to let it fetch fresh.
-      // However, the original code passed _myTickets.
-      _myTickets.add({
-        "title": _subjectController.text.trim(),
-        "dept": _selectedDepartment!,
-        "date": DateTime.now(),
-        "priority": "High",
-        "status": "Pending",
-      });
-
-      _showSuccessDialog();
+      _showSuccessDialog(result["ticket_id"]?.toString());
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -164,24 +150,24 @@ class _TicketRaiseState extends State<TicketRaise> {
     }
   }
 
-  void _showSuccessDialog() {
+  void _showSuccessDialog(String? ticketId) {
+    if (!mounted) return;
+
     showDialog(
       context: context,
-      barrierDismissible: false,
-      builder: (_) => const _SuccessDialog(),
+      barrierDismissible: true, // Allow tapping outside as fallback
+      builder: (_) => _SuccessDialog(ticketId: ticketId),
     );
 
+    // Auto-dismiss after 3 seconds
     Future.delayed(const Duration(seconds: 3), () {
-      if (!context.mounted) return;
-
-      Navigator.pop(context);
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          // We can remove tickets arg since the screen will fetch them
-          builder: (_) => const ViewTicketRaisingScreen(),
-        ),
-      );
+      if (!mounted) return;
+      
+      // Use Navigator.of(context).pop() to close the dialog if it's still there
+      Navigator.of(context, rootNavigator: true).pop();
+      
+      // Close the current screen to return to the history hub (which will refresh)
+      Navigator.of(context).pop();
     });
   }
 
@@ -249,22 +235,36 @@ class _TicketRaiseState extends State<TicketRaise> {
 }
 
 class _SuccessDialog extends StatelessWidget {
-  const _SuccessDialog();
+  final String? ticketId;
+  const _SuccessDialog({this.ticketId});
 
   @override
   Widget build(BuildContext context) {
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
-        padding: const EdgeInsets.all(32),
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
         child: Column(
           mainAxisSize: MainAxisSize.min,
-          children: const [
-            Icon(Icons.check_circle, color: Colors.green, size: 60),
-            SizedBox(height: 20),
+          children: [
+            const Icon(Icons.check_circle, color: Colors.green, size: 60),
+            const SizedBox(height: 20),
             Text(
-              "Has Been Submitted",
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+              "Your Ticket ${ticketId != null ? '#$ticketId' : ''}",
+              textAlign: TextAlign.center,
+              style: GoogleFonts.poppins(
+                fontSize: 16,
+                fontWeight: FontWeight.normal,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              "Has Been Raised",
+              textAlign: TextAlign.center,
+              style: GoogleFonts.poppins(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ],
         ),

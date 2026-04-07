@@ -10,11 +10,15 @@ import 'package:sms_autofill/sms_autofill.dart';
 class OtpBottomSheet extends StatefulWidget {
   final String phoneNumber;
   final String cusId;
+  final String? type;      // Verification type (e.g., 2001 for User, 2089 for Admin)
+  final String? resendType; // Resend type (e.g., 2000 for User, 2088 for Admin)
 
   const OtpBottomSheet({
     super.key,
     required this.phoneNumber,
     required this.cusId,
+    this.type,
+    this.resendType,
   });
 
   @override
@@ -337,7 +341,7 @@ class _OtpBottomSheetState extends State<OtpBottomSheet> with CodeAutoFill {
         mobile: widget.phoneNumber,
         otp: otp,
         cid: cid,
-        type: "2001",
+        type: widget.type ?? "2001",
         deviceId: deviceId,
         lat: lat,
         lng: lng,
@@ -359,19 +363,25 @@ class _OtpBottomSheetState extends State<OtpBottomSheet> with CodeAutoFill {
 
         String? employeeId;
 
-        // robustly find UID
-        if (response["data"] != null && response["data"] is Map) {
+        // Priority 1: cus_id from root (most reliable for this app logic)
+        employeeId ??= response["cus_id"]?.toString();
+
+        // Priority 2: data level IDs
+        if (employeeId == null &&
+            response["data"] != null &&
+            response["data"] is Map) {
           final data = response["data"];
           employeeId = (data["uid"] ?? data["id"] ?? data["user_id"])
               ?.toString();
           await prefs.setString("name", data["name"] ?? "User");
         }
 
-        // If not found in data, check root level
+        // Priority 3: other root level IDs
         employeeId ??=
             (response["uid"] ?? response["id"] ?? response["user_id"])
                 ?.toString();
 
+        // Priority 4: widget provided fallback
         employeeId ??= widget.cusId;
 
         /// 🔍 DEBUG – BEFORE STORE
@@ -387,22 +397,21 @@ class _OtpBottomSheetState extends State<OtpBottomSheet> with CodeAutoFill {
         if (employeeId.isNotEmpty) {
           await prefs.setString("employee_table_id", employeeId);
           await prefs.setInt("uid", int.tryParse(employeeId) ?? 0);
-          await prefs.setString("cid", cid);
-          await prefs.setString(
-            "mobile",
-            widget.phoneNumber,
-          ); // Persist mobile for Chat
 
-          /// 🔍 DEBUG – AFTER STORE
-          debugPrint(
-            "PREF employee_table_id => ${prefs.getString("employee_table_id")}",
-          );
-          debugPrint("PREF uid => ${prefs.getInt("uid")}");
-          debugPrint("PREF mobile => ${prefs.getString("mobile")}");
+          // ✅ PERSIST LOGIN CUS_ID FOR SESSION TRANSACTIONS
+          final String loginCusId =
+              response["cus_id"]?.toString() ?? employeeId;
+          await prefs.setString("login_cus_id", loginCusId);
+          debugPrint("PREF login_cus_id saved => $loginCusId");
+
+          await prefs.setString("cid", cid);
+          await prefs.setString("mobile", widget.phoneNumber);
+          debugPrint("PREF cid saved => $cid");
         }
 
         _snack("OTP verified successfully", true);
 
+        if (!context.mounted) return;
         Navigator.pushAndRemoveUntil(
           context,
           MaterialPageRoute(builder: (_) => MainRoot()),
@@ -434,7 +443,7 @@ class _OtpBottomSheetState extends State<OtpBottomSheet> with CodeAutoFill {
 
       final response = await LoginApi.sendOtp(
         mobile: widget.phoneNumber,
-        type: "2000",
+        type: widget.resendType ?? "2000",
         deviceId: deviceId,
         lat: lat,
         lng: lng,

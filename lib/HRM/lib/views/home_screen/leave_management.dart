@@ -1,13 +1,18 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:hrm/views/main_root.dart';
-
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'leave_application.dart';
+import 'permission_form.dart';
 
-void main() => runApp(const MaterialApp(home: LeaveManagementScreen()));
+enum LeaveManagementMode {
+  selection,
+  leaveDashboard,
+  leaveForm,
+  permissionDashboard,
+  permissionForm,
+}
 
 class LeaveManagementScreen extends StatefulWidget {
   const LeaveManagementScreen({super.key});
@@ -17,11 +22,13 @@ class LeaveManagementScreen extends StatefulWidget {
 }
 
 class _LeaveManagementScreenState extends State<LeaveManagementScreen> {
+  LeaveManagementMode _currentMode = LeaveManagementMode.selection;
   int selectedTab = 0; // 0 = Summary, 1 = History
-  List<dynamic> historyData = [];
+  List<dynamic> leaveHistoryData = [];
+  List<dynamic> permissionHistoryData = [];
+  Map<String, dynamic>? permissionSummary;
   bool isLoading = false;
   bool isBalanceLoading = false;
-  int? _selectedMonth; // Null means All/Annual
 
   // Static list structure matching original design
   List<Map<String, dynamic>> leaveBalanceData = [
@@ -57,18 +64,16 @@ class _LeaveManagementScreenState extends State<LeaveManagementScreen> {
       "taken": 0,
       "total": 12,
       "balance": "12/12",
-      "gradient": [const Color(0xFFF5F5F5), const Color(0xFFFFD4D5)],
-      "progressColor": const Color(0xffFB6065),
-      "titleColor": const Color(0xff1B2C61),
+      "gradient": [const Color(0xFFFFF5F5), const Color(0xFFFFD4D4)],
+      "progressColor": const Color(0xFFFB6065),
     },
     {
       "type": "Unpaid",
       "taken": 0,
       "total": null,
       "balance": "-/-",
-      "gradient": [const Color(0xFFF5F5F5), const Color(0xFFA8EA9F)],
-      "progressColor": const Color(0xFF00B894),
-      "titleColor": const Color(0xff1B2C61),
+      "gradient": [const Color(0xFFF5FFF5), const Color(0xFFD4FFD4)],
+      "progressColor": const Color(0xFF26A69A),
     },
   ];
 
@@ -76,7 +81,6 @@ class _LeaveManagementScreenState extends State<LeaveManagementScreen> {
   void initState() {
     super.initState();
     _fetchLeaveSummary();
-    // Pre-fetch history if needed, or wait until tab switch
   }
 
   Future<void> _fetchLeaveSummary() async {
@@ -84,178 +88,59 @@ class _LeaveManagementScreenState extends State<LeaveManagementScreen> {
     setState(() => isBalanceLoading = true);
     try {
       final prefs = await SharedPreferences.getInstance();
-      final uid = prefs.getInt('uid') ?? 1;
-      final lat = prefs.getDouble('lat')?.toString() ?? "145";
-      final lng = prefs.getDouble('lng')?.toString() ?? "145";
+      // âœ… PRIMARY UID: Use login_cus_id as requested for leave history
+      final String uid =
+          prefs.getString('login_cus_id') ??
+          prefs.getString('server_uid') ??
+          prefs.getString('employee_table_id') ??
+          prefs.getInt('uid')?.toString() ??
+          "2";
+
+      final String deviceId = prefs.getString('device_id') ?? "123456";
+      final String lt = prefs.getDouble('lat')?.toString() ?? "145";
+      final String ln = prefs.getDouble('lng')?.toString() ?? "145";
 
       final response = await http
           .post(
             Uri.parse("https://erpsmart.in/total/api/m_api/"),
             body: {
               "cid": prefs.getString('cid') ?? "",
-              "device_id": prefs.getString('device_id') ?? "",
-              "lt": lat,
-              "ln": lng,
+              "device_id": deviceId,
+              "lt": lt,
+              "ln": ln,
               "type": "2051",
-              "uid": uid.toString(),
-              "id": uid.toString(),
+              "uid": uid,
+              "id": uid,
             },
           )
           .timeout(const Duration(seconds: 20));
 
       if (response.statusCode == 200) {
+        debugPrint("API Response (Leave Summary): ${response.body}");
         final data = jsonDecode(response.body);
         if (data['error'] == false) {
-          List<dynamic> apiList = [];
-
-          // Check for 'leave_summary' at root level (as per User JSON)
-          if (data['leave_summary'] != null && data['leave_summary'] is List) {
-            apiList = data['leave_summary'];
-          } else if (data['data'] != null && data['data'] is List) {
-            apiList = data['data'];
-          } else if (data['data'] != null &&
-              data['data'] is Map &&
-              data['data']['leave_summary'] != null) {
-            apiList = data['data']['leave_summary'];
-          }
-
-          if (!mounted) return;
+          List<dynamic> apiList = data['leave_summary'] ?? [];
           setState(() {
-            // Iterate through our static list and update values if API has matching type
             for (var staticItem in leaveBalanceData) {
               String staticType = staticItem['type'].toString().toLowerCase();
-
-              // Find matching item in API list
               var apiItem = apiList.firstWhere((api) {
-                String apiType =
-                    (api['leave_type_name'] ??
-                            api['leave_type'] ??
-                            api['type'] ??
-                            "")
-                        .toString()
-                        .toLowerCase();
-                // Loose matching
-                if (staticType == "earned") {
-                  return apiType.contains("privilege") ||
-                      apiType.contains("earned");
-                }
-                if (staticType == "casual") {
-                  return apiType.contains("casual");
-                }
-                if (staticType == "sick") {
+                String apiType = (api['leave_type'] ?? "")
+                    .toString()
+                    .toLowerCase();
+                if (staticType == "earned")
+                  return apiType.contains("earned") ||
+                      apiType.contains("annual") ||
+                      apiType.contains("al");
+                if (staticType == "casual")
+                  return apiType.contains("casual") || apiType.contains("cl");
+                if (staticType == "sick")
                   return apiType.contains("medical") ||
+                      apiType.contains("ml") ||
                       apiType.contains("sick");
-                }
-                return apiType.contains(staticType);
-              }, orElse: () => null);
-
-              if (apiItem != null) {
-                int taken =
-                    int.tryParse(
-                      apiItem['leaves_taken_this_year']
-                              ?.toString() ?? // User JSON key
-                          apiItem['leave_taken']?.toString() ??
-                          apiItem['taken']?.toString() ??
-                          "0",
-                    ) ??
-                    0;
-                int total =
-                    int.tryParse(
-                      apiItem['max_days_per_year']
-                              ?.toString() ?? // User JSON key
-                          apiItem['total_allowed']?.toString() ??
-                          apiItem['total']?.toString() ??
-                          "12",
-                    ) ??
-                    12; // Default to 12 if missing or 0 might be better
-
-                staticItem['taken'] = taken;
-                staticItem['total'] = total;
-                staticItem['balance'] = "${total - taken}/$total";
-              }
-            }
-          });
-        }
-      }
-
-      // Also fetch history immediately so it's ready
-      await _fetchLeaveHistory();
-    } catch (e) {
-      debugPrint("Error fetching leave summary: $e");
-    } finally {
-      if (mounted) setState(() => isBalanceLoading = false);
-    }
-  }
-
-  Future<void> _fetchLeaveHistory() async {
-    if (!mounted) return;
-    setState(() => isLoading = true);
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final uid = prefs.getInt('uid') ?? 1;
-      final empCode = prefs.getString('employee_code') ?? ""; // GET CODE
-      final lat = prefs.getDouble('lat')?.toString() ?? "145";
-      final lng = prefs.getDouble('lng')?.toString() ?? "145";
-
-      final response = await http
-          .post(
-            Uri.parse("https://erpsmart.in/total/api/m_api/"),
-            body: {
-              "cid": prefs.getString('cid') ?? "",
-              "device_id": prefs.getString('device_id') ?? "",
-              "lt": lat,
-              "ln": lng,
-              "type": "2052",
-              "uid": uid.toString(),
-              "id": uid.toString(),
-            },
-          )
-          .timeout(const Duration(seconds: 20));
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        List<dynamic> fetchedList = [];
-
-        if (data is List) {
-          fetchedList = data;
-        } else {
-          // 1. Try to get History List from Map
-          if (data['leave_applications'] != null &&
-              data['leave_applications'] is List) {
-            fetchedList = data['leave_applications'];
-          } else if (data["data"] != null && data["data"] is List) {
-            fetchedList = data["data"];
-          } else if (data['error'] == false && data['data'] != null) {
-            // Fallback if data is in 'data' but maybe not directly a list?
-            // Or if we need to support old structure
-            if (data['data'] is List) fetchedList = data['data'];
-          }
-
-          // 2. Try to get Leave Summary (for the cards)
-          if (data['leave_summary'] != null && data['leave_summary'] is List) {
-            final summaryList = data['leave_summary'];
-            // Update local balance data
-            for (var staticItem in leaveBalanceData) {
-              String staticType = staticItem['type'].toString().toLowerCase();
-              dynamic apiItem = summaryList.firstWhere((api) {
-                String apiType =
-                    (api['leave_type_name'] ??
-                            api['leave_type'] ??
-                            api['type'] ??
-                            "")
-                        .toString()
-                        .toLowerCase();
-                if (staticType == "earned") {
-                  return apiType.contains("privilege") ||
-                      apiType.contains("earned");
-                }
-                if (staticType == "casual") {
-                  return apiType.contains("casual");
-                }
-                if (staticType == "sick") {
-                  return apiType.contains("medical") ||
-                      apiType.contains("sick");
-                }
+                if (staticType == "maternity")
+                  return apiType.contains("maternity");
+                if (staticType == "unpaid")
+                  return apiType.contains("unpaid") || apiType.contains("lop");
                 return apiType.contains(staticType);
               }, orElse: () => null);
 
@@ -275,88 +160,273 @@ class _LeaveManagementScreenState extends State<LeaveManagementScreen> {
                 staticItem['balance'] = "${total - taken}/$total";
               }
             }
-          }
+          });
         }
-        // FILTER BY EMPLOYEE CODE
-        if (empCode.isNotEmpty) {
-          fetchedList = fetchedList.where((item) {
-            final itemCode = item['employee_uid']?.toString() ?? "";
-            return itemCode == empCode;
-          }).toList();
-        }
+      }
+      await _fetchLeaveHistory();
+    } catch (e) {
+      debugPrint("Error fetching leave summary: $e");
+    } finally {
+      if (mounted) setState(() => isBalanceLoading = false);
+    }
+  }
 
-        historyData = fetchedList;
-        _calculateBalances();
+  Future<void> _fetchLeaveHistory() async {
+    if (!mounted) return;
+    setState(() => isLoading = true);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final String uid =
+          prefs.getString('login_cus_id') ??
+          prefs.getString('server_uid') ??
+          prefs.getString('employee_table_id') ??
+          prefs.getInt('uid')?.toString() ??
+          "2";
+
+      final String deviceId = prefs.getString('device_id') ?? "123456";
+      final String lt = prefs.getDouble('lat')?.toString() ?? "145";
+      final String ln = prefs.getDouble('lng')?.toString() ?? "145";
+
+      final response = await http
+          .post(
+            Uri.parse("https://erpsmart.in/total/api/m_api/"),
+            body: {
+              "cid": prefs.getString('cid') ?? "",
+              "device_id": deviceId,
+              "lt": lt,
+              "ln": ln,
+              "type": "2052",
+              "uid": uid,
+              "id": uid,
+            },
+          )
+          .timeout(const Duration(seconds: 20));
+
+      if (response.statusCode == 200) {
+        debugPrint("API Response (Leave History): ${response.body}");
+        final data = jsonDecode(response.body);
+        List<dynamic> fetchedList =
+            data['leave_applications'] ?? data['data'] ?? [];
+        setState(() {
+          leaveHistoryData = fetchedList;
+          _calculateBalances();
+        });
       }
     } catch (e) {
-      debugPrint("Error fetching leave history: $e");
+      debugPrint("Error fetching history: $e");
     } finally {
       if (mounted) setState(() => isLoading = false);
     }
   }
 
-  void _calculateBalances_Old() {
-    for (var b in leaveBalanceData) {
-      b['taken'] = 0;
+  Future<void> _fetchPermissionHistory() async {
+    if (!mounted) return;
+    setState(() => isLoading = true);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final String uid =
+          prefs.getString('login_cus_id') ??
+          prefs.getString('server_uid') ??
+          prefs.getString('employee_table_id') ??
+          prefs.getInt('uid')?.toString() ??
+          "2";
+
+      final String deviceId = prefs.getString('device_id') ?? "123456";
+      final String lt = prefs.getDouble('lat')?.toString() ?? "145";
+      final String ln = prefs.getDouble('lng')?.toString() ?? "145";
+
+      final response = await http
+          .post(
+            Uri.parse("https://erpsmart.in/total/api/m_api/"),
+            body: {
+              "cid": prefs.getString('cid') ?? "",
+              "device_id": deviceId,
+              "lt": lt,
+              "ln": ln,
+              "type": "2078",
+              "uid": uid,
+            },
+          )
+          .timeout(const Duration(seconds: 20));
+
+      if (response.statusCode == 200) {
+        debugPrint("API Response (Permission History): ${response.body}");
+        final data = jsonDecode(response.body);
+
+        List<dynamic> fetchedList =
+            data['data'] ?? data['permission_applications'] ?? [];
+        setState(() {
+          permissionHistoryData = fetchedList;
+          permissionSummary = data['summary'];
+
+          // Re-initialize permission summary items if we have summary data
+          if (permissionSummary != null) {
+            _updatePermissionBalances(data);
+          }
+        });
+      }
+    } catch (e) {
+      debugPrint("Error fetching permission history: $e");
+    } finally {
+      if (mounted) setState(() => isLoading = false);
     }
-    for (var h in historyData) {
-      // âœ… Only count APPROVED leaves in balance/taken
+  }
+
+  void _updatePermissionBalances(Map<String, dynamic> apiResponse) {
+    List<dynamic> fetchedList = apiResponse['data'] ?? [];
+    var summary = apiResponse['summary'];
+
+    // --- MANUAL CALCULATION FOR ACCURACY ---
+    int approved = 0;
+    int pending = 0;
+    int rejected = 0;
+
+    for (var item in fetchedList) {
+      String status = (item['status'] ?? "").toString().toLowerCase();
+      if (status == "1" ||
+          status == "approved" ||
+          status == "accept" ||
+          status.contains("approv")) {
+        approved++;
+      } else if (status == "2" || status == "rejected" || status == "reject") {
+        rejected++;
+      } else {
+        pending++;
+      }
+    }
+
+    // Use API summary values if they are higher (server-side total might include archived records)
+    if (summary != null) {
+      approved =
+          (int.tryParse(summary['approved']?.toString() ?? "0") ?? 0) > approved
+          ? int.parse(summary['approved'].toString())
+          : approved;
+      pending =
+          (int.tryParse(summary['pending']?.toString() ?? "0") ?? 0) > pending
+          ? int.parse(summary['pending'].toString())
+          : pending;
+      rejected =
+          (int.tryParse(summary['rejected']?.toString() ?? "0") ?? 0) > rejected
+          ? int.parse(summary['rejected'].toString())
+          : rejected;
+    }
+
+    int totalVisible = approved + pending + rejected;
+    if (totalVisible == 0) totalVisible = 1;
+
+    // We can use the first data item to get monthly balance if available
+    var firstItem = fetchedList.firstOrNull;
+
+    setState(() {
+      permissionBalanceData = [
+        {
+          "type": "Approved",
+          "count": approved,
+          "total": totalVisible,
+          "gradient": [const Color(0xFFF5F5F5), const Color(0xFFD4FEFF)],
+          "progressColor": Colors.green,
+        },
+        {
+          "type": "Pending",
+          "count": pending,
+          "total": totalVisible,
+          "gradient": [const Color(0xFFFFF5F5), const Color(0xFFFFD4D4)],
+          "progressColor": Colors.orange,
+        },
+        {
+          "type": "Rejected",
+          "count": rejected,
+          "total": totalVisible,
+          "gradient": [const Color(0xFFF5FFF5), const Color(0xFFD4FFD4)],
+          "progressColor": Colors.red,
+        },
+        {
+          "type": "Monthly Bal",
+          "count":
+              int.tryParse(firstItem?['per_taken']?.toString() ?? "0") ?? 0,
+          "total":
+              int.tryParse(firstItem?['Max_month']?.toString() ?? "2") ?? 2,
+          "balance":
+              "${firstItem?['bal_permission'] ?? '0'}/${firstItem?['Max_month'] ?? '2'}",
+          "gradient": [const Color(0xFFF5F5F5), const Color(0xFFF4D4FF)],
+          "progressColor": const Color(0xffD679F8),
+        },
+      ];
+    });
+  }
+
+  List<Map<String, dynamic>> permissionBalanceData = [
+    {
+      "type": "Approved",
+      "count": 0,
+      "total": 1,
+      "gradient": [const Color(0xFFF5F5F5), const Color(0xFFD4FEFF)],
+      "progressColor": Colors.green,
+    },
+    {
+      "type": "Pending",
+      "count": 0,
+      "total": 1,
+      "gradient": [const Color(0xFFFFF5F5), const Color(0xFFFFD4D4)],
+      "progressColor": Colors.orange,
+    },
+    {
+      "type": "Rejected",
+      "count": 0,
+      "total": 1,
+      "gradient": [const Color(0xFFF5FFF5), const Color(0xFFD4FFD4)],
+      "progressColor": Colors.red,
+    },
+    {
+      "type": "Monthly Bal",
+      "count": 0,
+      "total": 2,
+      "gradient": [const Color(0xFFF5F5F5), const Color(0xFFF4D4FF)],
+      "progressColor": const Color(0xffD679F8),
+    },
+  ];
+
+  void _calculateBalances() {
+    for (var b in leaveBalanceData) b['taken'] = 0;
+    for (var h in leaveHistoryData) {
       String status = (h['status'] ?? "0").toString().toLowerCase();
+      // âœ… STRICT RULE: Only count approved leaves in balance
       bool isApproved =
-          status == "1" ||
-          status.contains("approv") ||
-          status.contains("accept");
+          (status == "1" ||
+          status == "accept" ||
+          status == "approved" ||
+          status.contains("approv"));
       if (!isApproved) continue;
 
-      // --- Date Filter Logic ---
-      if (_selectedMonth != null) {
-        try {
-          // Parse date. Format usually YYYY-MM-DD
-          String dateStr =
-              (h['leave_start_date'] ?? h['date'] ?? h['f_date'] ?? "")
-                  .toString();
-          if (dateStr.isEmpty) continue;
-
-          DateTime? date = DateTime.tryParse(dateStr);
-          if (date != null) {
-            if (date.month != _selectedMonth) continue;
-          }
-        } catch (e) {
-          continue;
-        }
+      num days = 1;
+      if (h['leave_taken'] != null &&
+          h['leave_taken'].toString().isNotEmpty &&
+          h['leave_taken'].toString() != "null") {
+        days = num.tryParse(h['leave_taken'].toString()) ?? 1;
+      } else if (h['total_days'] != null &&
+          h['total_days'].toString().isNotEmpty &&
+          h['total_days'].toString() != "null") {
+        days = num.tryParse(h['total_days'].toString()) ?? 1;
+      } else if (h['no_of_days'] != null &&
+          h['no_of_days'].toString().isNotEmpty &&
+          h['no_of_days'].toString() != "null") {
+        days = num.tryParse(h['no_of_days'].toString()) ?? 1;
       }
+      String type = (h['leave_type'] ?? "").toString().toLowerCase();
 
-      // Get Days
-      num days = 0;
-      if (h['no_of_days'] != null) {
-        days = num.tryParse(h['no_of_days'].toString()) ?? 0;
-      } else if (h['total_days'] != null) {
-        days = num.tryParse(h['total_days'].toString()) ?? 0;
-      } else if (h['days'] != null) {
-        days = num.tryParse(h['days'].toString()) ?? 0;
-      } else {
-        days = 1;
-      }
-
-      // Get Type
-      String type = (h['leave_type'] ?? h['reason'] ?? "")
-          .toString()
-          .toLowerCase();
-
-      // Match and Add
       for (var b in leaveBalanceData) {
         String bType = b['type'].toString().toLowerCase();
         bool match = false;
-
-        if (bType == "earned") {
+        if (bType == "earned")
           match = type.contains("privilege") || type.contains("earned");
-        } else if (bType == "casual") {
+        else if (bType == "casual")
           match = type.contains("casual");
-        } else if (bType == "sick") {
+        else if (bType == "sick")
           match = type.contains("medical") || type.contains("sick");
-        } else {
+        else if (bType == "unpaid")
+          match = type.contains("unpaid") || type.contains("lop");
+        else
           match = type.contains(bType);
-        }
 
         if (match) {
           b['taken'] = (b['taken'] as num) + days;
@@ -364,732 +434,677 @@ class _LeaveManagementScreenState extends State<LeaveManagementScreen> {
         }
       }
     }
-
-    // 3. Update Balance Strings
     for (var b in leaveBalanceData) {
       num taken = b['taken'];
-      String bType = b['type'].toString().toLowerCase();
-      if (bType == "unpaid") {
+      if (b['type'].toString().toLowerCase() == "unpaid")
         b['balance'] = "$taken/-";
-      } else {
-        num total = b['total'] ?? 12; // Default if null
-        b['balance'] = "${total - taken}/$total";
-      }
-    }
-
-    setState(() {});
-  }
-
-  void _calculateBalances() {
-    // 1. Reset 'taken' count locally (keep 'total' from API/Static)
-    for (var b in leaveBalanceData) {
-      b['taken'] = 0;
-    }
-
-    // Map of Month -> List of Leaves
-    Map<int, List<Map<String, dynamic>>> monthlyLeaves = {};
-
-    for (var h in historyData) {
-      String status = (h['status'] ?? "0").toString().toLowerCase();
-
-      // âœ… Strictly only count "accept" or "approved" leaves in balance cards
-      bool isApproved =
-          status == "1" || status == "accept" || status.contains("approv");
-      if (!isApproved) continue;
-
-      DateTime? date;
-      try {
-        String dateStr =
-            (h['leave_start_date'] ?? h['date'] ?? h['f_date'] ?? "")
-                .toString();
-        if (dateStr.isNotEmpty) date = DateTime.tryParse(dateStr);
-      } catch (e) {
-        /* ignore */
-      }
-
-      if (date == null) continue;
-
-      // âœ… Only count leaves for the current year in the annual summary
-      int currentYear = DateTime.now().year;
-      if (date.year != currentYear) continue;
-
-      if (_selectedMonth != null && date.month != _selectedMonth) continue;
-
-      num days = 0;
-      if (h['no_of_days'] != null) {
-        days = num.tryParse(h['no_of_days'].toString()) ?? 0;
-      } else if (h['total_days'] != null) {
-        days = num.tryParse(h['total_days'].toString()) ?? 0;
-      } else if (h['days'] != null) {
-        days = num.tryParse(h['days'].toString()) ?? 0;
-      } else {
-        days = 1;
-      }
-
-      String type = (h['leave_type'] ?? h['reason'] ?? "")
-          .toString()
-          .toLowerCase();
-
-      if (!monthlyLeaves.containsKey(date.month)) {
-        monthlyLeaves[date.month] = [];
-      }
-      monthlyLeaves[date.month]!.add({'type': type, 'days': days});
-    }
-
-    // Apply Rules Per Month
-    monthlyLeaves.forEach((month, leaves) {
-      num monthlyTotalPaid = 0;
-      num monthlyUnpaidDirect = 0;
-      List<Map<String, dynamic>> paidLeavesList = [];
-
-      for (var leave in leaves) {
-        String type = leave['type'];
-        num days = leave['days'];
-
-        if (type.contains("unpaid") ||
-            type.contains("loss") ||
-            type.contains("lop") ||
-            type.contains("without pay")) {
-          monthlyUnpaidDirect += days;
-        } else {
-          monthlyTotalPaid += days;
-          paidLeavesList.add(leave);
-        }
-      }
-
-      num allowed = 2; // Limit per user requirement
-      num excess = 0;
-      if (monthlyTotalPaid > allowed) {
-        excess = monthlyTotalPaid - allowed;
-      }
-
-      _addToBalance("unpaid", monthlyUnpaidDirect + excess);
-
-      num remainingQuota = allowed;
-      for (var leave in paidLeavesList) {
-        String type = leave['type'];
-        num days = leave['days'];
-        num daysToAttribute = 0;
-
-        if (remainingQuota > 0) {
-          if (remainingQuota >= days) {
-            daysToAttribute = days;
-            remainingQuota -= days;
-          } else {
-            daysToAttribute = remainingQuota;
-            remainingQuota = 0;
-          }
-        }
-
-        if (daysToAttribute > 0) _addToBalance(type, daysToAttribute);
-      }
-    });
-
-    // 3. Update Balance Strings
-    for (var b in leaveBalanceData) {
-      num taken = b['taken'];
-      String bType = b['type'].toString().toLowerCase();
-      if (bType == "unpaid") {
-        b['balance'] = "$taken/-";
-      } else {
-        num total = b['total'] ?? 12; // Default if null
-        b['balance'] = "${total - taken}/$total";
-      }
-    }
-
-    if (!mounted) return;
-    setState(() {});
-  }
-
-  void _addToBalance(String apiType, num days) {
-    for (var b in leaveBalanceData) {
-      String bType = b['type'].toString().toLowerCase();
-      bool match = false;
-      if (bType == "earned") {
-        match =
-            apiType.contains("privilege") ||
-            apiType.contains("earned") ||
-            apiType.contains(" el") ||
-            apiType.contains("annual") ||
-            apiType.contains(" al");
-      } else if (bType == "casual") {
-        match = apiType.contains("casual") || apiType.contains(" cl");
-      } else if (bType == "sick") {
-        match =
-            apiType.contains("medical") ||
-            apiType.contains("sick") ||
-            apiType.contains(" ml");
-      } else if (bType == "unpaid") {
-        match = apiType.contains("unpaid") || apiType.contains("lop");
-      } else {
-        match = apiType.contains(bType);
-      }
-
-      if (match) {
-        b['taken'] = (b['taken'] as num) + days;
-        break; // Add to first matching category
-      }
+      else
+        b['balance'] = "${(b['total'] ?? 12) - taken}/${b['total'] ?? 12}";
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    String title = "Leave Management";
+    if (_currentMode == LeaveManagementMode.leaveDashboard)
+      title = "Leave Request";
+    if (_currentMode == LeaveManagementMode.leaveForm) title = "Apply Leave";
+    if (_currentMode == LeaveManagementMode.permissionDashboard)
+      title = "Permission Request";
+    if (_currentMode == LeaveManagementMode.permissionForm)
+      title = "Apply Permission";
+
+    bool isPermission =
+        _currentMode == LeaveManagementMode.permissionDashboard ||
+        _currentMode == LeaveManagementMode.permissionForm;
+
+    Color themeColor = isPermission
+        ? const Color(0xFF5C6BC0)
+        : const Color(0xff26A69A);
+
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
       appBar: AppBar(
-        backgroundColor: const Color(0xff26A69A),
+        backgroundColor: themeColor,
         foregroundColor: Colors.white,
-        elevation: 1,
+        elevation: 0,
+        centerTitle: true,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
+          icon: const Icon(Icons.arrow_back_ios_new),
           onPressed: () {
-            Navigator.pushAndRemoveUntil(
-              context,
-              MaterialPageRoute(builder: (context) => const MainRoot()),
-              (route) => false,
-            );
+            if (_currentMode == LeaveManagementMode.selection) {
+              Navigator.pop(context);
+            } else if (_currentMode == LeaveManagementMode.leaveForm) {
+              setState(() => _currentMode = LeaveManagementMode.leaveDashboard);
+            } else if (_currentMode == LeaveManagementMode.permissionForm) {
+              setState(
+                () => _currentMode = LeaveManagementMode.permissionDashboard,
+              );
+            } else {
+              setState(() => _currentMode = LeaveManagementMode.selection);
+            }
           },
         ),
         title: Text(
-          'Leave Management',
-          style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w500),
+          title,
+          style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.bold),
         ),
       ),
-      body: Column(
+      body: _buildBody(),
+    );
+  }
+
+  Widget _buildBody() {
+    switch (_currentMode) {
+      case LeaveManagementMode.selection:
+        return _buildSelectionMode();
+      case LeaveManagementMode.leaveDashboard:
+        return RefreshIndicator(
+          onRefresh: () async {
+            await _fetchLeaveSummary();
+            await _fetchLeaveHistory();
+          },
+          color: const Color(0xff26A69A),
+          child: _buildDashboardMode(isLeave: true),
+        );
+      case LeaveManagementMode.permissionDashboard:
+        return RefreshIndicator(
+          onRefresh: () async {
+            await _fetchPermissionHistory();
+          },
+          color: const Color(0xFF5C6BC0),
+          child: _buildDashboardMode(isLeave: false),
+        );
+      case LeaveManagementMode.leaveForm:
+        return const SingleChildScrollView(
+          padding: EdgeInsets.all(20),
+          child: LeaveForm(),
+        );
+      case LeaveManagementMode.permissionForm:
+        return const SingleChildScrollView(
+          padding: EdgeInsets.all(20),
+          child: PermissionForm(),
+        );
+    }
+  }
+
+  Widget _buildSelectionMode() {
+    return SingleChildScrollView(
+      physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SizedBox(height: 12),
-
-          // FIXED TABS
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 16, 8),
-            child: Container(
-              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
-              decoration: BoxDecoration(
-                color: Colors.grey.shade200,
-                borderRadius: BorderRadius.circular(30),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: GestureDetector(
-                      onTap: () => setState(() => selectedTab = 0),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        decoration: BoxDecoration(
-                          color: selectedTab == 0
-                              ? const Color(0xff26A69A)
-                              : Colors.white,
-                          borderRadius: BorderRadius.circular(40),
-                        ),
-                        child: Text(
-                          "Leave Summary",
-                          textAlign: TextAlign.center,
-                          style: GoogleFonts.poppins(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                            color: selectedTab == 0
-                                ? Colors.white
-                                : Colors.grey.shade700,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: GestureDetector(
-                      onTap: () {
-                        setState(() => selectedTab = 1);
-                        if (historyData.isEmpty || true) {
-                          _fetchLeaveHistory();
-                        }
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        decoration: BoxDecoration(
-                          color: selectedTab == 1
-                              ? const Color(0xff26A69A)
-                              : Colors.white,
-                          borderRadius: BorderRadius.circular(40),
-                        ),
-                        child: Text(
-                          "Leave History",
-                          textAlign: TextAlign.center,
-                          style: GoogleFonts.poppins(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                            color: selectedTab == 1
-                                ? Colors.white
-                                : Colors.grey.shade700,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
           const SizedBox(height: 10),
-
-          // SCROLLABLE BODY
-          Expanded(
-            child: SingleChildScrollView(
-              child: Column(
-                children: [
-                  selectedTab == 0
-                      ? isBalanceLoading
-                            ? const Center(child: CircularProgressIndicator())
-                            : Column(
-                                children: [
-                                  Padding(
-                                    padding: const EdgeInsets.only(
-                                      left: 16,
-                                      right: 16,
-                                      bottom: 10,
-                                    ),
-                                    child: Align(
-                                      alignment: Alignment.centerLeft,
-                                      child: PopupMenuButton<int>(
-                                        offset: const Offset(0, 40),
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            12,
-                                          ),
-                                        ),
-                                        onSelected: (int? value) {
-                                          setState(() {
-                                            _selectedMonth = value;
-                                          });
-                                          _calculateBalances();
-                                        },
-                                        itemBuilder: (context) {
-                                          const months = [
-                                            "January",
-                                            "February",
-                                            "March",
-                                            "April",
-                                            "May",
-                                            "June",
-                                            "July",
-                                            "August",
-                                            "September",
-                                            "October",
-                                            "November",
-                                            "December",
-                                          ];
-                                          return [
-                                            const PopupMenuItem(
-                                              value: null,
-                                              child: Text("All Months"),
-                                            ),
-                                            ...List.generate(12, (index) {
-                                              return PopupMenuItem(
-                                                value: index + 1,
-                                                child: Text(months[index]),
-                                              );
-                                            }),
-                                          ];
-                                        },
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 12,
-                                            vertical: 6,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: const Color(0xff26A69A),
-                                            borderRadius: BorderRadius.circular(
-                                              4,
-                                            ),
-                                          ),
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              const Icon(
-                                                Icons.sort,
-                                                color: Colors.white,
-                                                size: 18,
-                                              ),
-                                              const SizedBox(width: 6),
-                                              Text(
-                                                _selectedMonth == null
-                                                    ? "Sort by"
-                                                    : [
-                                                        "Jan",
-                                                        "Feb",
-                                                        "Mar",
-                                                        "Apr",
-                                                        "May",
-                                                        "Jun",
-                                                        "Jul",
-                                                        "Aug",
-                                                        "Sep",
-                                                        "Oct",
-                                                        "Nov",
-                                                        "Dec",
-                                                      ][_selectedMonth! - 1],
-                                                style: GoogleFonts.poppins(
-                                                  fontSize: 14,
-                                                  fontWeight: FontWeight.w500,
-                                                  color: Colors.white,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  LeaveBalanceGrid(leaveData: leaveBalanceData),
-                                  const SizedBox(height: 24),
-                                  const HolidayListCard(),
-                                  const SizedBox(height: 24),
-                                ],
-                              )
-                      : isLoading
-                      ? const Center(child: CircularProgressIndicator())
-                      : Column(
-                          children: [
-                            LeaveHistoryList(history: historyData),
-                            const SizedBox(height: 20),
-                          ],
-                        ),
-                ],
-              ),
+          Text(
+            "Welcome back!",
+            style: GoogleFonts.poppins(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: const Color(0xFF1B2C61),
             ),
           ),
+          Text(
+            "Select a category to manage your requests.",
+            style: GoogleFonts.poppins(
+              fontSize: 14,
+              color: const Color(0xFF64748B),
+            ),
+          ),
+          const SizedBox(height: 32),
+          _selectionCardResponsive(
+            "Leave Request",
+            "Total Leave: 12 Days Yearly",
+            "Manage balance & history",
+            Icons.event_note_rounded,
+            const Color.fromRGBO(38, 166, 154, 1),
+            () {
+              setState(() {
+                _currentMode = LeaveManagementMode.leaveDashboard;
+                selectedTab = 0; // Reset to Summary tab
+              });
+              _fetchLeaveSummary();
+            },
+          ),
+          const SizedBox(height: 20),
+          _selectionCardResponsive(
+            "Permission Request",
+            "Total Permission: 2/Month",
+            "Apply personal permission",
+            Icons.more_time_rounded,
+            const Color(0xFF5C6BC0),
+            () {
+              setState(() {
+                _currentMode = LeaveManagementMode.permissionDashboard;
+                selectedTab = 0; // Reset to Summary tab
+              });
+              _fetchPermissionHistory();
+            },
+          ),
+          const SizedBox(height: 30),
+        ],
+      ),
+    );
+  }
 
-          // FIXED BOTTOM BUTTON
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 16),
-            child: ApplyLeaveButton(),
+  Widget _selectionCardResponsive(
+    String title,
+    String subtitle,
+    String desc,
+    IconData icon,
+    Color color,
+    VoidCallback onTap,
+  ) {
+    return AspectRatio(
+      aspectRatio: 1.6,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(24),
+        child: Container(
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(24),
+            boxShadow: [
+              BoxShadow(
+                color: color.withValues(alpha: 0.12),
+                blurRadius: 20,
+                offset: const Offset(0, 10),
+              ),
+            ],
+            border: Border.all(color: color.withValues(alpha: 0.1), width: 1.5),
+          ),
+          child: Stack(
+            children: [
+              // Decorative circle
+              Positioned(
+                top: -30,
+                right: -30,
+                child: CircleAvatar(
+                  radius: 70,
+                  backgroundColor: color.withValues(alpha: 0.04),
+                ),
+              ),
+
+              Padding(
+                padding: const EdgeInsets.all(24.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: color.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Icon(icon, color: color, size: 28),
+                    ),
+                    const Spacer(),
+                    Text(
+                      title,
+                      style: GoogleFonts.poppins(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: const Color(0xFF1B2C61),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      subtitle,
+                      style: GoogleFonts.poppins(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: color,
+                      ),
+                    ),
+                    Text(
+                      desc,
+                      style: GoogleFonts.poppins(
+                        fontSize: 12,
+                        color: const Color(0xFF94A3B8),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              Positioned(
+                bottom: 20,
+                right: 20,
+                child: CircleAvatar(
+                  radius: 20,
+                  backgroundColor: color,
+                  child: const Icon(
+                    Icons.arrow_forward_ios,
+                    size: 14,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDashboardMode({required bool isLeave}) {
+    Color themeColor = isLeave
+        ? const Color(0xff26A69A)
+        : const Color(0xFF5C6BC0);
+    return Column(
+      children: [
+        _buildTabs(themeColor),
+        Expanded(
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: Column(
+              children: [
+                selectedTab == 0
+                    ? (isBalanceLoading || (isLoading && !isLeave))
+                          ? const Center(
+                              child: Padding(
+                                padding: EdgeInsets.all(40),
+                                child: CircularProgressIndicator(),
+                              ),
+                            )
+                          : _buildSummaryGrid(isLeave: isLeave)
+                    : (isLoading
+                          ? const Center(
+                              child: Padding(
+                                padding: EdgeInsets.all(40),
+                                child: CircularProgressIndicator(),
+                              ),
+                            )
+                          : _buildHistoryList(isLeave: isLeave)),
+                const SizedBox(height: 20),
+                _buildHolidayListCard(),
+                const SizedBox(height: 20),
+                _buildApplyButton(isLeave, themeColor),
+                const SizedBox(height: 40),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTabs(Color themeColor) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      child: Container(
+        padding: const EdgeInsets.all(4),
+        decoration: BoxDecoration(
+          color: Colors.grey.shade200,
+          borderRadius: BorderRadius.circular(30),
+        ),
+        child: Row(
+          children: [
+            _tabItem(0, "Summary", themeColor),
+            _tabItem(1, "History", themeColor),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _tabItem(int index, String label, Color themeColor) {
+    bool isSelected = selectedTab == index;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => setState(() => selectedTab = index),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            color: isSelected ? themeColor : Colors.transparent,
+            borderRadius: BorderRadius.circular(30),
+          ),
+          child: Text(
+            label,
+            textAlign: TextAlign.center,
+            style: GoogleFonts.poppins(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: isSelected ? Colors.white : Colors.grey.shade600,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSummaryGrid({required bool isLeave}) {
+    List<Map<String, dynamic>> dataList = isLeave
+        ? leaveBalanceData
+        : permissionBalanceData;
+    return Column(
+      children: [
+        const SizedBox(height: 10),
+        GridView.builder(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            crossAxisSpacing: 16,
+            mainAxisSpacing: 16,
+            childAspectRatio: 1.1,
+          ),
+          itemCount: dataList.length,
+          itemBuilder: (context, index) =>
+              _balanceCard(dataList[index], isLeave: isLeave),
+        ),
+      ],
+    );
+  }
+
+  Widget _balanceCard(Map<String, dynamic> data, {required bool isLeave}) {
+    num count = (data['taken'] ?? data['count'] ?? 0);
+    num total = (data['total'] ?? 1);
+    double progress = (total > 0) ? (count / total) : 0;
+    if (progress > 1.0) progress = 1.0;
+
+    String balanceText =
+        data['balance'] ??
+        (isLeave ? "${total - count}/$total" : "$count/$total");
+
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: data['gradient'] ?? [Colors.white, Colors.white],
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.08),
+            blurRadius: 12,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 6,
+                      height: 6,
+                      decoration: BoxDecoration(
+                        color: data['progressColor'],
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        data['type'],
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.poppins(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: const Color(0xFF1B2C61),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                _balanceInfoRow(isLeave ? "Taken" : "Count", ": $count"),
+                const SizedBox(height: 4),
+                _balanceInfoRow(
+                  isLeave ? "Balance" : "Status",
+                  ": $balanceText",
+                ),
+              ],
+            ),
+          ),
+          const Spacer(),
+          Container(
+            height: 8,
+            width: double.infinity,
+            margin: const EdgeInsets.only(left: 12, right: 12, bottom: 12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: FractionallySizedBox(
+              alignment: Alignment.centerLeft,
+              widthFactor: progress,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: data['progressColor'],
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
           ),
         ],
       ),
     );
   }
-}
 
-// class ProfileSection extends StatelessWidget {
-//   const ProfileSection({super.key});
-//   @override Widget build(BuildContext context) => Padding(
-//     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-//     child: ProfileInfoCard(name: 'Harsh', employeeId: '1023', designation: 'Supervisor', profileImagePath: 'assets/profile.png'),
-//   );
-// }
+  Widget _balanceInfoRow(String label, String value) {
+    return Row(
+      children: [
+        SizedBox(
+          width: 60,
+          child: Text(
+            label,
+            style: GoogleFonts.poppins(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: const Color(0xFF1B2C61),
+            ),
+          ),
+        ),
+        Text(
+          value,
+          style: GoogleFonts.poppins(
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+            color: const Color(0xFF1B2C61),
+          ),
+        ),
+      ],
+    );
+  }
 
-class LeaveBalanceGrid extends StatelessWidget {
-  final List<Map<String, dynamic>> leaveData;
-  const LeaveBalanceGrid({super.key, required this.leaveData});
-
-  // Replaced original static list with passed data
-  // No list here
-
-  @override
-  Widget build(BuildContext context) {
-    final double cardWidth = (MediaQuery.of(context).size.width - 48 - 20) / 2;
-
+  Widget _buildHolidayListCard() {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Wrap(
-        spacing: 20,
-        runSpacing: 20,
-        children: leaveData.map((data) {
-          final progress = data["total"] == null
-              ? 0.0
-              : (data["taken"] as num) / (data["total"] as num);
-          return SizedBox(
-            width: cardWidth,
-            child: Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: data["gradient"],
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+        decoration: BoxDecoration(
+          color: const Color(
+            0xFFFFB7B7,
+          ).withValues(alpha: 0.6), // Light red/pink
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            const Icon(
+              Icons.calendar_month,
+              color: Color(0xFF1B2C61),
+              size: 30,
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Text(
+                "Holiday List",
+                style: GoogleFonts.poppins(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: const Color(0xFF1B2C61),
                 ),
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.grey.withValues(alpha: 0.15),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '• ${data["type"]}',
-                    style: GoogleFonts.poppins(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: data["titleColor"],
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'Taken    : ${data["taken"]} Days',
-                    style: GoogleFonts.poppins(
-                      fontSize: 14,
-                      color: Colors.black87,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Balance : ${data["balance"]}',
-                    style: GoogleFonts.poppins(
-                      fontSize: 14,
-                      color: Colors.black87,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(4),
-                    child: LinearProgressIndicator(
-                      value: progress,
-                      backgroundColor: Colors.grey[300],
-                      valueColor: AlwaysStoppedAnimation(data["progressColor"]),
-                      minHeight: 8,
-                    ),
-                  ),
-                ],
               ),
             ),
-          );
-        }).toList(),
+            const Icon(Icons.arrow_right, color: Color(0xFF1B2C61)),
+          ],
+        ),
       ),
     );
   }
-}
 
-class LeaveHistoryList extends StatelessWidget {
-  final List<dynamic> history;
-  const LeaveHistoryList({super.key, this.history = const []});
-
-  @override
-  Widget build(BuildContext context) {
-    if (history.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.all(20),
-        child: Center(
-          child: Text(
-            "No leave history found",
-            style: GoogleFonts.poppins(color: Colors.grey),
-          ),
+  Widget _buildHistoryList({required bool isLeave}) {
+    List<dynamic> dataToUse = isLeave
+        ? leaveHistoryData
+        : permissionHistoryData;
+    if (dataToUse.isEmpty) {
+      // Re-trigger fetch if empty and dashboard just loaded
+      if (isLeave) {
+        _fetchLeaveHistory();
+      } else {
+        _fetchPermissionHistory();
+      }
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(40),
+          child: Text("No records found"),
         ),
       );
     }
-
     return ListView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      itemCount: history.length,
-      itemBuilder: (context, index) {
-        final item = history[index];
-        // Parse date range
-        String dateRange = item["date"] ?? item["f_date"] ?? "-";
-        if (item["leave_start_date"] != null &&
-            item["leave_end_date"] != null) {
-          dateRange =
-              "${item["leave_start_date"]} To ${item["leave_end_date"]}";
-        }
-
-        // Handle leave_type
-        String type = "Leave";
-        if (item["leave_type"] != null) {
-          type = item["leave_type"];
-        } else if (item["reason"] != null) {
-          type = item["reason"];
-        }
-
-        final statusRaw = item["status"]?.toString().toLowerCase() ?? "pending";
-
-        String status = "Pending";
-        Color statusColor = const Color(0xffF87000);
-        Color statusBgColor = const Color(0xffFFF3E0);
-
-        if (statusRaw == "1" ||
-            statusRaw == "accept" ||
-            statusRaw.contains("approv")) {
-          status = "Approved";
-          statusColor = const Color(0xff05D817);
-          statusBgColor = const Color(0xffE8F5E8);
-        } else if (statusRaw == "2" ||
-            statusRaw == "reject" ||
-            statusRaw.contains("reject")) {
-          status = "Rejected";
-          statusColor = Colors.red;
-          statusBgColor = const Color(0xffFFEBEE);
-        }
-
-        return Container(
-          margin: const EdgeInsets.only(bottom: 12),
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.grey.withValues(alpha: 0.1),
-                blurRadius: 10,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10), // Increased padding
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade50, // Slight background
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Image.asset(
-                  'assets/leavearrow.png', // Ensure this asset exists
-                  width: 24,
-                  height: 24,
-                  errorBuilder: (context, error, stackTrace) =>
-                      const Icon(Icons.description, color: Color(0xff26A69A)),
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      type, // Main Title: Leave Type
-                      style: GoogleFonts.poppins(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.black87,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      dateRange, // Subtitle: Date Range
-                      style: GoogleFonts.poppins(
-                        fontSize: 14,
-                        color: Colors.grey.shade600,
-                        fontWeight: FontWeight.w500,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: statusBgColor,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  status,
-                  style: GoogleFonts.poppins(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: statusColor,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      itemCount: dataToUse.length,
+      itemBuilder: (context, index) => _historyCard(dataToUse[index], isLeave),
     );
   }
-}
 
-class ApplyLeaveButton extends StatelessWidget {
-  const ApplyLeaveButton({super.key});
+  Widget _historyCard(Map<String, dynamic> item, bool isLeave) {
+    String status = (item['status'] ?? "0").toString().toLowerCase();
+    Color statusColor = Colors.orange;
+    String statusText = "Pending";
 
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 32),
-      child: SizedBox(
-        width: 280,
-        height: 50,
-        child: ElevatedButton(
-          onPressed: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => LeaveApplication()),
-            );
-          },
-          style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xff26A69A),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
-            ),
-            elevation: 6,
+    bool isApproved =
+        (status == "1" ||
+        status == "accept" ||
+        status == "approved" ||
+        status.contains("approv"));
+    bool isRejected =
+        (status == "2" ||
+        status == "reject" ||
+        status == "rejected" ||
+        status.contains("reject"));
+
+    if (isApproved) {
+      statusColor = Colors.green;
+      statusText = "Approved";
+    } else if (isRejected) {
+      statusColor = Colors.red;
+      statusText = "Rejected";
+    }
+
+    String title = isLeave
+        ? (item['leave_type']?.toString().isNotEmpty == true
+              ? item['leave_type']
+              : "Leave Request")
+        : (item['permission_type']?.toString().isNotEmpty == true
+              ? item['permission_type']
+              : "Permission Request");
+    String dateRange = isLeave
+        ? "${item['leave_start_date']} to ${item['leave_end_date']}"
+        : "${item['permission_date'] ?? item['app_date'] ?? ""} (${item['start_time']} - ${item['end_time'] ?? item['end_date'] ?? ""})";
+
+    String durationLabel = isLeave
+        ? "(${item['total_days'] ?? item['no_of_days'] ?? item['leave_taken'] ?? "0"} Days)"
+        : ""; // Permissions are usually hourly
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey.shade100),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
           ),
-          child: Text(
-            'Apply Leave / Permission',
-            style: GoogleFonts.poppins(
-              fontSize: 17,
-              fontWeight: FontWeight.w600,
-              color: Colors.white,
+        ],
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  "$title $durationLabel",
+                  style: GoogleFonts.poppins(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: const Color(0xFF1B2C61),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  dateRange,
+                  style: GoogleFonts.poppins(
+                    fontSize: 12,
+                    color: const Color(0xFF64748B),
+                  ),
+                ),
+              ],
             ),
           ),
-        ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: statusColor.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(30),
+            ),
+            child: Text(
+              statusText,
+              style: GoogleFonts.poppins(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                color: statusColor,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
-}
 
-class HolidayListCard extends StatelessWidget {
-  const HolidayListCard({super.key});
-
-  @override
-  Widget build(BuildContext context) {
+  Widget _buildApplyButton(bool isLeave, Color themeColor) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(16),
-        onTap: () {},
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          decoration: BoxDecoration(
-            color: const Color(0xffF5ACAC),
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.08),
-                blurRadius: 8,
-                offset: const Offset(0, 4),
-              ),
-            ],
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: SizedBox(
+        width: double.infinity,
+        height: 55,
+        child: ElevatedButton(
+          onPressed: () => setState(
+            () => _currentMode = isLeave
+                ? LeaveManagementMode.leaveForm
+                : LeaveManagementMode.permissionForm,
           ),
-          child: Row(
-            children: [
-              const Icon(
-                Icons.event_note_outlined,
-                color: Color(0xff1B2C61),
-                size: 26,
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Text(
-                  'Holiday List',
-                  style: GoogleFonts.poppins(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: const Color(0xff1B2C61),
-                  ),
-                ),
-              ),
-              const Icon(Icons.arrow_right, size: 35, color: Colors.black),
-            ],
+          style: ElevatedButton.styleFrom(
+            backgroundColor: themeColor,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            elevation: 0,
+          ),
+          child: Text(
+            isLeave ? "Apply for Leave" : "Apply for Permission",
+            style: GoogleFonts.poppins(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
           ),
         ),
       ),

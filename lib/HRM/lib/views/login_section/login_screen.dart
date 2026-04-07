@@ -6,7 +6,9 @@ import 'package:hrm/views/login_section/sign_in_whatsapp.dart';
 import 'package:hrm/views/login_section/sign_up.dart';
 import '../../models/login_api.dart';
 import 'package:hrm/services/device_service.dart';
+import 'package:hrm/views/login_section/login_user_pass.dart';
 import 'otp_popup.dart';
+
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -109,18 +111,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             if (_emailController.text.trim().isEmpty) {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(
-                                  content: Text("Please enter your email"),
-                                ),
-                              );
-                              return;
-                            }
-
-                            if (!RegExp(
-                              r"^[a-zA-Z0-9.a-zA-Z0-9.!#$%&'*+-/=?^_`{|}~]+@[a-zA-Z0-9]+\.[a-zA-Z]+",
-                            ).hasMatch(_emailController.text.trim())) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text("Please enter a valid email"),
+                                  content: Text("Please enter your email or mobile"),
                                 ),
                               );
                               return;
@@ -155,13 +146,21 @@ class _LoginScreenState extends State<LoginScreen> {
                                 final String cusId =
                                     response["cus_id"]?.toString() ?? "";
 
+                                // ✅ PERSIST ORIGINAL CUS_ID FOR SESSION
+                                if (cusId.isNotEmpty) {
+                                  await prefs.setString("login_cus_id", cusId);
+                                  debugPrint(
+                                    "PREF login_cus_id saved (INIT) => $cusId",
+                                  );
+                                }
+
                                 if (response.containsKey("cid") &&
                                     response["cid"] != null) {
                                   final String cid = response["cid"].toString();
                                   await prefs.setString("cid", cid);
                                 }
 
-                                if (mounted) {
+                                if (mounted && context.mounted) {
                                   showModalBottomSheet(
                                     context: context,
                                     isScrollControlled: true,
@@ -176,7 +175,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                   );
                                 }
                               } else {
-                                if (mounted) {
+                                if (mounted && context.mounted) {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(
                                       content: Text(
@@ -189,9 +188,9 @@ class _LoginScreenState extends State<LoginScreen> {
                               }
                             } catch (e) {
                               debugPrint("SEND OTP ERROR => $e");
-                              if (mounted) {
+                              if (mounted && context.mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text("Server Error")),
+                                  SnackBar(content: Text("Error: $e")),
                                 );
                               }
                             } finally {
@@ -299,6 +298,30 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                   ],
+                ),
+
+                SizedBox(height: height * 0.04),
+
+                /// Login with Password link
+                Center(
+                  child: TextButton(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const LoginUserPassScreen(),
+                        ),
+                      );
+                    },
+                    child: const Text(
+                      "Login with Password",
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: Color(0xff26A69A),
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
                 ),
 
                 SizedBox(height: height * 0.04),

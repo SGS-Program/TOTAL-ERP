@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
@@ -99,11 +99,14 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
   ) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final String cid = prefs.getString('cid') ?? "21472147";
-      final String uid = (prefs.getInt('uid') ?? 80).toString();
-      final String deviceId = prefs.getString('device_id') ?? "123";
-      final String lat = prefs.getDouble('lat')?.toString() ?? "145";
-      final String lng = prefs.getDouble('lng')?.toString() ?? "145";
+      final String cid = prefs.getString('cid') ?? "";
+      final String uid = prefs.getString('server_uid') ??
+                         prefs.getString('login_cus_id') ?? 
+                         prefs.getString('employee_table_id') ?? 
+                         prefs.getInt('uid')?.toString() ?? "";
+      final String deviceId = prefs.getString('device_id') ?? "";
+      final String lat = prefs.getDouble('lat')?.toString() ?? "";
+      final String lng = prefs.getDouble('lng')?.toString() ?? "";
       final String? token = prefs.getString('token');
 
       final body = {

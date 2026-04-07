@@ -7,13 +7,12 @@ import 'package:dotted_border/dotted_border.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:intl/intl.dart';
-import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'dart:convert';
-import 'package:http_parser/http_parser.dart';
 import '../../services/face_detector_service.dart';
-import '../../models/attendance_api.dart';
+import 'package:hrm/models/attendance_api.dart';
+import 'package:hrm/views/login_section/login_screen.dart';
 
 class CheckOutVerificationScreen extends StatefulWidget {
   const CheckOutVerificationScreen({super.key});
@@ -39,8 +38,9 @@ class _CheckOutVerificationScreenState
   final FaceDetectorService _faceDetectorService = FaceDetectorService();
 
   bool isLoading = false;
-  int? uid;
+  String uid = "";
   String? cid;
+  String? serverUidString;
   String? deviceId;
   Position? currentPosition;
 
@@ -122,7 +122,7 @@ class _CheckOutVerificationScreenState
       final iosInfo = await deviceInfo.iosInfo;
       deviceId = iosInfo.identifierForVendor;
     }
-    setState(() {});
+    if (mounted) setState(() {});
   }
 
   Future<void> _fetchLocationAndTime() async {
@@ -140,7 +140,11 @@ class _CheckOutVerificationScreenState
     try {
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
-        setState(() => locationController.text = "Location services disabled");
+        if (mounted) {
+          setState(
+            () => locationController.text = "Location services disabled",
+          );
+        }
         return;
       }
 
@@ -148,15 +152,19 @@ class _CheckOutVerificationScreenState
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
         if (permission == LocationPermission.denied) {
-          setState(() => locationController.text = "Permission denied");
+          if (mounted) {
+            setState(() => locationController.text = "Permission denied");
+          }
           return;
         }
       }
 
       if (permission == LocationPermission.deniedForever) {
-        setState(
-          () => locationController.text = "Permission permanently denied",
-        );
+        if (mounted) {
+          setState(
+            () => locationController.text = "Permission permanently denied",
+          );
+        }
         return;
       }
 
@@ -183,27 +191,39 @@ class _CheckOutVerificationScreenState
           address = address.substring(0, address.length - 1).trim();
         }
 
-        setState(() {
-          locationController.text = address.isEmpty
-              ? "Location found"
-              : address;
-        });
+        if (mounted) {
+          setState(() {
+            locationController.text = address.isEmpty
+                ? "Location found"
+                : address;
+          });
+        }
       } else {
-        setState(() => locationController.text = "Address not found");
+        if (mounted)
+          setState(() => locationController.text = "Address not found");
       }
     } catch (e) {
       debugPrint("LOCATION ERROR => $e");
-      setState(() => locationController.text = "Error getting location");
+      if (mounted)
+        setState(() => locationController.text = "Error getting location");
     }
   }
 
   Future<void> _loadUid() async {
     final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      uid = prefs.getInt('uid') ?? 4;
-      cid = prefs.getString('cid') ?? "";
-    });
-    debugPrint("LOADED UID: $uid, CID: $cid");
+    if (mounted) {
+      setState(() {
+        uid =
+            prefs.getString('login_cus_id') ??
+            prefs.getString('server_uid') ??
+            prefs.getString('employee_table_id') ??
+            prefs.getInt('uid')?.toString() ??
+            "";
+        cid = prefs.getString('cid') ?? "";
+        serverUidString = prefs.getString('server_uid');
+      });
+    }
+    debugPrint("LOADED UID: $uid, CID: $cid, SERVER_UID: $serverUidString");
   }
 
   @override
@@ -627,9 +647,11 @@ class _CheckOutVerificationScreenState
       maxHeight: 800,
     );
     if (photo != null) {
-      setState(() {
-        _vehicleImage = File(photo.path);
-      });
+      if (mounted) {
+        setState(() {
+          _vehicleImage = File(photo.path);
+        });
+      }
     }
   }
 
@@ -709,9 +731,11 @@ class _CheckOutVerificationScreenState
             }
           }
 
-          setState(() {
-            _image = imageFile;
-          });
+          if (mounted) {
+            setState(() {
+              _image = imageFile;
+            });
+          }
 
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
@@ -747,9 +771,9 @@ class _CheckOutVerificationScreenState
     }
   }
 
-  void _submit() async {
+  Future<void> _submit() async {
     String? errorMsg;
-    if (uid == null) {
+    if (uid.isEmpty) {
       errorMsg = 'User ID not found. Please log in again.';
     } else if (outTimeController.text.isEmpty) {
       errorMsg = 'Please select Out Time';
@@ -769,14 +793,6 @@ class _CheckOutVerificationScreenState
       errorMsg = 'Please take a selfie for verification';
     }
 
-    final prefs = await SharedPreferences.getInstance();
-    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
-    final lastCheckOut = prefs.getString('last_checkout_date');
-
-    if (lastCheckOut == today) {
-      errorMsg = 'You have already checked out for today.';
-    }
-
     if (errorMsg != null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(errorMsg), backgroundColor: Colors.red),
@@ -787,10 +803,8 @@ class _CheckOutVerificationScreenState
     setState(() => isLoading = true);
 
     try {
-      final request = http.MultipartRequest(
-        'POST',
-        Uri.parse("https://erpsmart.in/total/api/m_api/"),
-      );
+      final prefs = await SharedPreferences.getInstance();
+      final String? token = prefs.getString('token');
 
       String transportId = "";
       if (selectedVehicleMode != null) {
@@ -803,47 +817,22 @@ class _CheckOutVerificationScreenState
         }
       }
 
-      request.fields.addAll({
-        "type": "2047",
-        "cid": cid ?? "",
-        "uid": uid.toString(),
-        "out_time": outTimeController.text,
-        "loc": locationController.text,
-        "wrk_mde": selectedMode?.toLowerCase() ?? "",
-        "device_id": deviceId ?? "123456",
-        "lt": currentPosition?.latitude.toString() ?? "0.0",
-        "ln": currentPosition?.longitude.toString() ?? "0.0",
-        "transport_id": transportId,
-      });
-
-      if (_vehicleImage != null) {
-        final String vExt = _vehicleImage!.path.split('.').last.toLowerCase();
-        request.files.add(
-          await http.MultipartFile.fromPath(
-            'photo',
-            _vehicleImage!.path,
-            contentType: MediaType('image', vExt == 'jpg' ? 'jpeg' : vExt),
-          ),
-        );
-      }
-
-      final String extension = _image!.path.split('.').last.toLowerCase();
-      request.files.add(
-        await http.MultipartFile.fromPath(
-          'selfie',
-          _image!.path,
-          contentType: MediaType(
-            'image',
-            extension == 'jpg' ? 'jpeg' : extension,
-          ),
-        ),
+      final responseData = await AttendanceApi.checkOut(
+        cid: cid ?? "21472147",
+        uid: uid,
+        outTime: outTimeController.text,
+        loc: locationController.text,
+        workMode: selectedMode?.toLowerCase() ?? "",
+        deviceId: deviceId ?? "123456",
+        lat: currentPosition?.latitude.toString() ?? "0.0",
+        lng: currentPosition?.longitude.toString() ?? "0.0",
+        transportId: transportId,
+        token: token,
+        selfie: _image,
+        vehiclePhoto: _vehicleImage,
       );
 
-      final streamedResponse = await request.send();
-      final response = await http.Response.fromStream(streamedResponse);
-      final responseData = jsonDecode(response.body);
-
-      debugPrint("CHECK-OUT RESPONSE => ${response.body}");
+      debugPrint("CHECK-OUT RESPONSE => $responseData");
 
       final bool isSuccess =
           responseData["error"] == false ||
@@ -856,11 +845,17 @@ class _CheckOutVerificationScreenState
           );
 
       if (isSuccess) {
-        // Clear check-in status
-        final prefs = await SharedPreferences.getInstance();
         final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
         await prefs.setBool('isCheckedIn', false);
         await prefs.setString('last_checkout_date', today);
+        await prefs.setBool('is_on_break', false);
+
+        // Save token if it exists in the response
+        final String? newToken =
+            responseData["token"] ?? responseData["data"]?["token"];
+        if (newToken != null && newToken.isNotEmpty) {
+          await prefs.setString('token', newToken);
+        }
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -874,12 +869,10 @@ class _CheckOutVerificationScreenState
           Navigator.pop(context, true);
         }
       } else {
+        final String errorMsg = responseData["message"] ?? "Check-out failed";
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(responseData["message"] ?? 'Check-out failed'),
-              backgroundColor: Colors.red,
-            ),
+            SnackBar(content: Text(errorMsg), backgroundColor: Colors.red),
           );
         }
       }

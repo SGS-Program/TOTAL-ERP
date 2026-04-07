@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:hrm/views/home/settings.dart';
@@ -109,7 +109,7 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
             );
           }
         }
-        // If didAuthenticate == false â†’ user cancelled â†’ do nothing silently
+        // If didAuthenticate == false → user cancelled → do nothing silently
       } on PlatformException catch (e) {
         debugPrint(
           "PlatformException enabling biometric: ${e.code} - ${e.message}",

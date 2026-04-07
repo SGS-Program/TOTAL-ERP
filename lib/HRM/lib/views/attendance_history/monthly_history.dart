@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'dart:convert';
 import 'dart:io';
@@ -53,7 +53,16 @@ class _AttendanceMonthlyHistoryState extends State<AttendanceMonthlyHistory> {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
       cid = prefs.getString('cid') ?? "";
-      uid = prefs.getInt('uid') ?? 0;
+      // Use same UID resolution as the rest of the app
+      uid =
+          int.tryParse(
+            prefs.getString('login_cus_id') ??
+                prefs.getString('server_uid') ??
+                prefs.getString('employee_table_id') ??
+                prefs.getInt('uid')?.toString() ??
+                "0",
+          ) ??
+          0;
     });
     await _getDeviceId();
     _fetchMonthlyData();
@@ -94,15 +103,31 @@ class _AttendanceMonthlyHistoryState extends State<AttendanceMonthlyHistory> {
         debugPrint("Location error: $e");
       }
 
+      // ✅ Read ALL params directly from prefs to avoid race conditions with state
+      final prefs = await SharedPreferences.getInstance();
+      final String? sessionToken = prefs.getString('token');
+      final String resolvedCid = prefs.getString('cid') ?? cid;
+      final String resolvedUid = prefs.getString('server_uid') ??
+          prefs.getString('login_cus_id') ??
+          prefs.getString('employee_table_id') ??
+          prefs.getInt('uid')?.toString() ??
+          uid.toString();
+      final String resolvedDeviceId =
+          prefs.getString('device_id') ?? deviceId ?? "123456";
+
       final body = {
         "type": "2064",
-        "cid": cid,
-        "uid": uid.toString(),
-        "device_id": deviceId ?? "123456",
+        "cid": resolvedCid,
+        "uid": resolvedUid,
+        "id": resolvedUid,
+        "device_id": resolvedDeviceId,
         "lt": position?.latitude.toString() ?? "0.0",
         "ln": position?.longitude.toString() ?? "0.0",
+        "report_type": "attendance",
         "month": selectedMonth.toString(),
         "year": selectedYear.toString(),
+        if (sessionToken != null && sessionToken.isNotEmpty)
+          "token": sessionToken,
       };
 
       debugPrint("Monthly Request: $body");
@@ -111,16 +136,22 @@ class _AttendanceMonthlyHistoryState extends State<AttendanceMonthlyHistory> {
           .post(Uri.parse("https://erpsmart.in/total/api/m_api/"), body: body)
           .timeout(const Duration(seconds: 20));
 
+      debugPrint("Monthly RAW RESPONSE: ${response.body.substring(0, response.body.length.clamp(0, 500))}");
+
       final data = jsonDecode(response.body);
       if (data["error"] == false || data["error"] == "false") {
         setState(() {
           if (data["statistics"] != null) {
             stats = Map<String, dynamic>.from(data["statistics"]);
+            debugPrint("Monthly Stats: $stats");
           }
           if (data["data"] != null) {
             attendanceList = List<dynamic>.from(data["data"]);
+            debugPrint("Monthly Records count: ${attendanceList.length}");
           }
         });
+      } else {
+        debugPrint("Monthly API Error: ${data['error_msg']}");
       }
     } catch (e) {
       debugPrint("Error fetching monthly data: $e");
@@ -288,23 +319,32 @@ class _AttendanceMonthlyHistoryState extends State<AttendanceMonthlyHistory> {
     int daysPresent = 0;
     int totalWorkingDays = 0;
 
-    // Calculate locally based on attendanceList and date logic
-    // Days present: count from list
-    daysPresent = attendanceList.where((record) {
-      String status = record["status"]?.toString().toLowerCase() ?? "";
-      return status.contains("present") || status.contains("check out");
-    }).length;
+    // Count days present:
+    // Primary: use API statistics.total_records (most accurate — server computed)
+    // Fallback: count records with at least a valid in_time
+    bool isTimeValid(dynamic time) {
+      if (time == null) return false;
+      String t = time.toString().trim().toLowerCase();
+      return t.isNotEmpty && t != "null" && t != "00:00:00" && t != "00:00";
+    }
 
-    // 2. Calculate Total Working Days (Denominator)
+    if (stats != null && stats!["total_records"] != null) {
+      daysPresent = int.tryParse(stats!["total_records"].toString()) ?? 0;
+    } else {
+      // Fallback: count records that have at least a check-in
+      daysPresent = attendanceList.where((record) {
+        return isTimeValid(record["in_time"]);
+      }).length;
+    }
+
+    // Total working/calendar days for the denominator
     DateTime now = DateTime.now();
     int daysInMonth = DateUtils.getDaysInMonth(selectedYear, selectedMonth);
 
     if (selectedYear == now.year && selectedMonth == now.month) {
-      // Current month: up to today
-      totalWorkingDays = now.day;
+      totalWorkingDays = now.day; // current month: up to today
     } else {
-      // Past month: full month
-      totalWorkingDays = daysInMonth;
+      totalWorkingDays = daysInMonth; // past month: full month
     }
 
     if (totalWorkingDays > 0) {

@@ -5,7 +5,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
-
 import 'package:shared_preferences/shared_preferences.dart';
 
 class TasksListScreen extends StatefulWidget {
@@ -19,7 +18,6 @@ class _TasksListScreenState extends State<TasksListScreen> {
   Timer? _timer;
   bool _isLoading = true;
   List<Map<String, dynamic>> tasks = [];
-
   bool _isFirstLoad = true;
 
   @override
@@ -32,7 +30,6 @@ class _TasksListScreenState extends State<TasksListScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Refresh data whenever the screen becomes visible again (e.g., navigating back)
     if (!_isFirstLoad) {
       _fetchTasks();
     }
@@ -43,7 +40,12 @@ class _TasksListScreenState extends State<TasksListScreen> {
     try {
       final prefs = await SharedPreferences.getInstance();
       final String cid = prefs.getString('cid') ?? "21472147";
-      final String uid = (prefs.getInt('uid') ?? 80).toString();
+      // Standardize UID to use login_cus_id as priority
+      final String uid =
+          prefs.getString('login_cus_id') ??
+          prefs.getString('server_uid') ??
+          prefs.getInt('uid')?.toString() ??
+          "80";
       final String deviceId = prefs.getString('device_id') ?? "12345";
       final String lat = prefs.getDouble('lat')?.toString() ?? "145";
       final String lng = prefs.getDouble('lng')?.toString() ?? "145";
@@ -57,6 +59,8 @@ class _TasksListScreenState extends State<TasksListScreen> {
         "ln": lng,
       };
 
+      debugPrint("Fetching tasks (Type 2073) body: $body");
+
       final response = await http.post(
         Uri.parse("https://erpsmart.in/total/api/m_api/"),
         body: body,
@@ -65,11 +69,12 @@ class _TasksListScreenState extends State<TasksListScreen> {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         if (data["error"] == false) {
-          final List tasksData = data["data"];
+          final List tasksData = data["data"] ?? [];
           setState(() {
             tasks = tasksData.map((t) {
               final String taskId = t["task_id"].toString();
-              // Get local status if exists to override stale API data
+
+              // Local persistence sync
               final String? localStatus = prefs.getString(
                 "task_status_$taskId",
               );
@@ -85,20 +90,17 @@ class _TasksListScreenState extends State<TasksListScreen> {
                   .toLowerCase();
               final String? apiApproval = t["approval_status"]?.toString();
 
-              // Handle "1", "2", "done", "partial", etc.
               bool isDoneStatus =
                   currentStatus == "done" ||
                   currentStatus == "completed" ||
                   currentStatus == "1";
               bool isPartial =
                   currentStatus == "partial" || currentStatus == "2";
-              bool isPendingStatus =
-                  !isDoneStatus; // Any task not done is pending
+              bool isPendingStatus = !isDoneStatus;
 
               int apiSeconds = _parseTimeStringToSeconds(
                 t["spending_time"] ?? "00:00:00",
               );
-              // Use whichever is higher: API or local cache (to handle cases where they leave mid-timer)
               int finalSeconds =
                   (localSeconds != null && localSeconds > apiSeconds)
                   ? localSeconds
@@ -106,13 +108,13 @@ class _TasksListScreenState extends State<TasksListScreen> {
 
               return {
                 "id": taskId,
-                "title": t["task_name"],
-                "deadline": t["due_date"],
-                "task_timing": t["task_timing"],
-                "priority": t["priority"],
+                "title": t["task_name"] ?? "Untitled Task",
+                "deadline": t["due_date"] ?? "N/A",
+                "task_timing": t["task_timing"] ?? "00:00:00",
+                "priority": t["priority"] ?? "N/A",
                 "isPending": isPendingStatus,
                 "elapsedSeconds": finalSeconds,
-                "isRunning": false,
+                "isRunning": false, // local timer state
                 "timeLimitSeconds": _parseTimeStringToSeconds(
                   t["task_timing"] ?? "00:00:00",
                 ),
@@ -161,7 +163,6 @@ class _TasksListScreenState extends State<TasksListScreen> {
           for (var task in tasks) {
             if (task["isRunning"] == true) {
               task["elapsedSeconds"] = (task["elapsedSeconds"] ?? 0) + 1;
-              // Trigger a save to local storage occasionally
               if (task["elapsedSeconds"] % 5 == 0) shouldSave = true;
             }
           }
@@ -264,7 +265,6 @@ class _TasksListScreenState extends State<TasksListScreen> {
                   },
                   onToggle: (bool val) async {
                     if (!val) {
-                      // Marking as Completed
                       await _updateTaskOnBackend(
                         task,
                         status: "done",
@@ -284,10 +284,14 @@ class _TasksListScreenState extends State<TasksListScreen> {
                       });
                     }
                   },
-                  onTimerToggle: () {
+                  onTimerToggle: () async {
                     setState(() {
+                      // Stop other timers
+                      for (var t in tasks) t["isRunning"] = false;
                       task["isRunning"] = true;
                     });
+                    // Sync start with backend as requested "once started can't stop"
+                    await _updateTaskOnBackend(task, status: "started");
                   },
                 );
               },
@@ -303,46 +307,52 @@ class _TasksListScreenState extends State<TasksListScreen> {
     try {
       final prefs = await SharedPreferences.getInstance();
       final String cid = prefs.getString('cid') ?? "21472147";
-      final String uid = (prefs.getInt('uid') ?? 80).toString();
-      final String deviceId = prefs.getString('device_id') ?? "12345";
+      final String uid =
+          prefs.getString('login_cus_id') ??
+          prefs.getString('server_uid') ??
+          prefs.getInt('uid')?.toString() ??
+          "2";
+      final String deviceId = prefs.getString('device_id') ?? "123";
       final String lat = prefs.getDouble('lat')?.toString() ?? "145";
       final String lng = prefs.getDouble('lng')?.toString() ?? "145";
+      final String? token = prefs.getString('token');
+
+      // Map status strings to numeric values as required by backend example
+      String finalStatus = status;
+      if (status == "done" || status == "completed") {
+        finalStatus = "1";
+      } else if (status == "partial") {
+        finalStatus = "2";
+      }
 
       final body = {
         "type": "2074",
         "cid": cid,
         "uid": uid,
-        "device_id": deviceId,
-        "lt": lat,
-        "ln": lng,
         "task_id": task["id"].toString(),
-        "status": status,
-        "reason": remarks,
+        "status": finalStatus,
+        "token": token ?? "",
+        "device_id": deviceId,
+        "ln": lng,
+        "lt": lat,
         "spending_time": _formatDuration(task["elapsedSeconds"] ?? 0),
+        "reason": remarks,
         "completion_date": DateFormat('yyyy-MM-dd').format(DateTime.now()),
       };
 
-      // Store status locally to persist state across screens
       await prefs.setString("task_status_${task["id"]}", status);
       if (status == "partial") {
         await prefs.setString("task_remarks_${task["id"]}", remarks);
       }
 
-      debugPrint("Updating Task API Request: $body");
+      debugPrint("Updating Task (Type 2074) Request Body: $body");
 
       final response = await http.post(
         Uri.parse("https://erpsmart.in/total/api/m_api/"),
         body: body,
       );
 
-      debugPrint("Updating Task API Response: ${response.body}");
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        if (data["error"] == false) {
-          debugPrint("Task updated successfully on backend");
-        }
-      }
+      debugPrint("Updating Task (Type 2074) Response Body: ${response.body}");
     } catch (e) {
       debugPrint("Error updating task on backend: $e");
     }
@@ -378,7 +388,7 @@ class _TasksListScreenState extends State<TasksListScreen> {
         border: Border.all(color: Colors.grey.shade200, width: 1.5.w),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.06),
+            color: Colors.black.withOpacity(0.06),
             blurRadius: 15.r,
             offset: Offset(0, 6.h),
           ),
@@ -527,8 +537,7 @@ class _TasksListScreenState extends State<TasksListScreen> {
           ),
           Row(
             children: [
-              if (isPending &&
-                  (approvalStatus == null || approvalStatus == 'rejected'))
+              if (isPending)
                 GestureDetector(
                   onTap: isRunning ? null : onTimerToggle,
                   child: Container(
@@ -538,7 +547,7 @@ class _TasksListScreenState extends State<TasksListScreen> {
                     ),
                     decoration: BoxDecoration(
                       color: isRunning
-                          ? Colors.blue.shade50
+                          ? Colors.blue.shade100
                           : Colors.green.shade100,
                       borderRadius: BorderRadius.circular(12.r),
                     ),
@@ -558,7 +567,6 @@ class _TasksListScreenState extends State<TasksListScreen> {
                             fontWeight: FontWeight.w700,
                             color: isRunning ? Colors.blue : Colors.green,
                           ),
-                          overflow: TextOverflow.ellipsis,
                         ),
                       ],
                     ),
@@ -589,9 +597,9 @@ class _TasksListScreenState extends State<TasksListScreen> {
                 Expanded(
                   child: _statusActionButton(
                     "Pending",
-                    isPending,
+                    isPending && !isPartiallyCompleted,
                     Colors.red,
-                    isPending
+                    isPending && !isPartiallyCompleted
                         ? Icons.radio_button_checked
                         : Icons.radio_button_off,
                     null,
@@ -634,18 +642,10 @@ class _TasksListScreenState extends State<TasksListScreen> {
               style: GoogleFonts.poppins(fontSize: 14.sp),
               decoration: InputDecoration(
                 hintText: "Enter why it's pending...",
-                hintStyle: GoogleFonts.poppins(
-                  fontSize: 14.sp,
-                  color: Colors.grey.shade400,
-                ),
                 contentPadding: EdgeInsets.all(12.w),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(10.r),
                   borderSide: BorderSide(color: Colors.grey.shade300),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10.r),
-                  borderSide: const BorderSide(color: Color(0xFF26A69A)),
                 ),
               ),
             ),
@@ -656,7 +656,6 @@ class _TasksListScreenState extends State<TasksListScreen> {
                 onPressed: onPartialSubmit,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF26A69A),
-                  padding: EdgeInsets.symmetric(vertical: 12.h),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10.r),
                   ),
@@ -666,7 +665,6 @@ class _TasksListScreenState extends State<TasksListScreen> {
                   style: GoogleFonts.poppins(
                     fontWeight: FontWeight.w600,
                     color: Colors.white,
-                    fontSize: 14.sp,
                   ),
                 ),
               ),
@@ -680,7 +678,6 @@ class _TasksListScreenState extends State<TasksListScreen> {
                 decoration: BoxDecoration(
                   color: Colors.orange.shade50,
                   borderRadius: BorderRadius.circular(12.r),
-                  border: Border.all(color: Colors.orange.shade200, width: 1.w),
                 ),
                 child: Row(
                   children: [
@@ -709,7 +706,7 @@ class _TasksListScreenState extends State<TasksListScreen> {
               padding: EdgeInsets.only(top: 15.h),
               child: Container(
                 width: double.infinity,
-                padding: EdgeInsets.symmetric(vertical: 14.h, horizontal: 18.w),
+                padding: EdgeInsets.all(15.w),
                 decoration: BoxDecoration(
                   color: approvalStatus == 'pending'
                       ? Colors.blue.shade50
@@ -717,66 +714,32 @@ class _TasksListScreenState extends State<TasksListScreen> {
                             ? Colors.green.shade50
                             : Colors.red.shade50),
                   borderRadius: BorderRadius.circular(15.r),
-                  border: Border.all(
-                    color: approvalStatus == 'pending'
-                        ? Colors.blue.shade200
-                        : (approvalStatus == 'approved'
-                              ? Colors.green.shade200
-                              : Colors.red.shade200),
-                    width: 1.5.w,
-                  ),
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                child: Row(
                   children: [
-                    Row(
-                      children: [
-                        Icon(
-                          approvalStatus == 'pending'
-                              ? Icons.hourglass_empty
-                              : (approvalStatus == 'approved'
-                                    ? Icons.verified
-                                    : Icons.cancel),
-                          color: approvalStatus == 'pending'
-                              ? Colors.blue
-                              : (approvalStatus == 'approved'
-                                    ? Colors.green
-                                    : Colors.red),
-                          size: 24.sp,
-                        ),
-                        SizedBox(width: 12.w),
-                        Expanded(
-                          child: Text(
-                            approvalStatus == 'pending'
-                                ? "Waiting for TL Approval"
-                                : (approvalStatus == 'approved'
-                                      ? "Task Approved by TL"
-                                      : "Task Rejected by TL"),
-                            style: GoogleFonts.poppins(
-                              fontSize: 15.sp,
-                              fontWeight: FontWeight.w700,
-                              color: approvalStatus == 'pending'
-                                  ? Colors.blue.shade900
-                                  : (approvalStatus == 'approved'
-                                        ? Colors.green.shade900
-                                        : Colors.red.shade900),
-                            ),
-                          ),
-                        ),
-                      ],
+                    Icon(
+                      approvalStatus == 'pending'
+                          ? Icons.hourglass_empty
+                          : (approvalStatus == 'approved'
+                                ? Icons.verified
+                                : Icons.cancel),
+                      color: approvalStatus == 'pending'
+                          ? Colors.blue
+                          : (approvalStatus == 'approved'
+                                ? Colors.green
+                                : Colors.red),
                     ),
-                    if (approvalStatus == 'pending')
-                      Padding(
-                        padding: EdgeInsets.only(top: 8.h),
-                        child: Text(
-                          "Completed at: ${DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now())}",
-                          style: GoogleFonts.poppins(
-                            fontSize: 11.sp,
-                            color: Colors.blue.shade700,
-                            fontStyle: FontStyle.italic,
-                          ),
-                        ),
+                    SizedBox(width: 10.w),
+                    Expanded(
+                      child: Text(
+                        approvalStatus == 'pending'
+                            ? "Waiting for TL Approval"
+                            : (approvalStatus == 'approved'
+                                  ? "Task Approved"
+                                  : "Task Rejected"),
+                        style: GoogleFonts.poppins(fontWeight: FontWeight.w700),
                       ),
+                    ),
                   ],
                 ),
               ),
@@ -810,7 +773,6 @@ class _TasksListScreenState extends State<TasksListScreen> {
           ),
         ),
         child: Column(
-          mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
               icon,
@@ -819,18 +781,15 @@ class _TasksListScreenState extends State<TasksListScreen> {
                   ? Colors.white
                   : (isActive ? color : Colors.grey.shade600),
             ),
-            SizedBox(height: 6.h),
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Text(
-                label,
-                style: GoogleFonts.poppins(
-                  fontSize: 13.sp,
-                  fontWeight: FontWeight.w800,
-                  color: (isActive && label == "Completed")
-                      ? Colors.white
-                      : (isActive ? color : Colors.grey.shade600),
-                ),
+            SizedBox(height: 4.h),
+            Text(
+              label,
+              style: GoogleFonts.poppins(
+                fontSize: 12.sp,
+                fontWeight: FontWeight.w800,
+                color: (isActive && label == "Completed")
+                    ? Colors.white
+                    : (isActive ? color : Colors.grey.shade600),
               ),
             ),
           ],

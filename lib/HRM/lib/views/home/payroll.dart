@@ -44,16 +44,18 @@ class _PayrollScreenState extends State<PayrollScreen> {
 
     try {
       final prefs = await SharedPreferences.getInstance();
-      String uid =
+
+      // ✅ Payroll API uses login_cus_id (login user ID = 2), NOT server/employee ID
+      final String uid =
+          prefs.getString('login_cus_id') ??
+          prefs.getString('server_uid') ??
           prefs.getString('employee_table_id') ??
           prefs.getInt('uid')?.toString() ??
           "";
-      final cid = prefs.getString('cid') ?? "";
-      final deviceId = prefs.getString('device_id') ?? "";
+      final String cid = prefs.getString('cid') ?? "";
+      final String deviceId = prefs.getString('device_id') ?? "";
 
-      debugPrint(
-        "Fetched from SharedPreferences: cid=$cid, deviceId=$deviceId",
-      );
+      debugPrint("Payroll: cid=$cid, uid=$uid");
 
       // Check permissions and get location
       final position = await _determinePosition();
@@ -295,14 +297,14 @@ class _PayrollScreenState extends State<PayrollScreen> {
                                 Expanded(
                                   child: _buildWhiteInnerCard(
                                     "Monthly",
-                                    "₹${_payrollData?['salary_summary']?['monthly_salary'] ?? 0}",
+                                    "?${_payrollData?['earnings']?['basic_salary'] ?? 0}",
                                   ),
                                 ),
                                 const SizedBox(width: 16),
                                 Expanded(
                                   child: _buildWhiteInnerCard(
                                     "Per Day",
-                                    "₹${_payrollData?['salary_summary']?['per_day_salary'] ?? 0}",
+                                    "?${_payrollData?['attendance']?['per_day_salary'] ?? 0}",
                                   ),
                                 ),
                               ],
@@ -312,15 +314,15 @@ class _PayrollScreenState extends State<PayrollScreen> {
                               children: [
                                 Expanded(
                                   child: _buildWhiteInnerCard(
-                                    "Days Worked",
-                                    "${_payrollData?['salary_summary']?['days_worked'] ?? 0} Days",
+                                    "Present",
+                                    "${_payrollData?['attendance']?['no_of_present'] ?? 0} Days",
                                   ),
                                 ),
                                 const SizedBox(width: 16),
                                 Expanded(
                                   child: _buildWhiteInnerCard(
-                                    "Leave days",
-                                    "${_payrollData?['salary_summary']?['leave_days'] ?? 0} Days",
+                                    "Absence",
+                                    "${_payrollData?['attendance']?['no_of_absence'] ?? 0} Days",
                                   ),
                                 ),
                               ],
@@ -344,7 +346,7 @@ class _PayrollScreenState extends State<PayrollScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              "Earnings",
+                              "Earnings & Allowances",
                               style: GoogleFonts.poppins(
                                 fontSize: 18,
                                 fontWeight: FontWeight.w600,
@@ -352,25 +354,41 @@ class _PayrollScreenState extends State<PayrollScreen> {
                               ),
                             ),
                             const SizedBox(height: 16),
-
                             _buildEarningsRow(
-                              "Bonus",
-                              "₹ ${_payrollData?['earnings']?['bonus'] ?? 0}",
+                              "Basic Salary",
+                              "? ${_payrollData?['earnings']?['basic_salary'] ?? 0}",
                             ),
                             _buildEarningsDivider(),
                             _buildEarningsRow(
-                              "Allowance",
-                              "₹ ${_payrollData?['earnings']?['allowance'] ?? 0}",
+                              "HRA",
+                              "? ${_payrollData?['earnings']?['hra'] ?? 0}",
                             ),
                             _buildEarningsDivider(),
                             _buildEarningsRow(
-                              "Incentive",
-                              "₹ ${_payrollData?['earnings']?['incentive'] ?? 0}",
+                              "Conveyance",
+                              "? ${_payrollData?['earnings']?['conveyance_allowance'] ?? 0}",
                             ),
-
+                            _buildEarningsDivider(),
+                            _buildEarningsRow(
+                              "Medical",
+                              "? ${_payrollData?['earnings']?['medical_allowance'] ?? 0}",
+                            ),
+                            _buildEarningsDivider(),
+                            _buildEarningsRow(
+                              "Special",
+                              "? ${_payrollData?['earnings']?['special_allowance'] ?? 0}",
+                            ),
+                            _buildEarningsDivider(),
+                            _buildEarningsRow(
+                              "Others",
+                              "? ${_payrollData?['earnings']?['other_allowances'] ?? 0}",
+                            ),
+                            _buildEarningsDivider(),
+                            _buildEarningsRow(
+                              "Incentives",
+                              "? ${_payrollData?['earnings']?['incentives'] ?? 0}",
+                            ),
                             const SizedBox(height: 20),
-
-                            // Green Incentive Box with Star Image
                             if (_payrollData?['earnings']?['incentive_message'] !=
                                     null &&
                                 _payrollData!['earnings']['incentive_message']
@@ -384,10 +402,10 @@ class _PayrollScreenState extends State<PayrollScreen> {
                                 ),
                                 child: Row(
                                   children: [
-                                    Image.asset(
-                                      "assets/star.png",
-                                      height: 40,
-                                      width: 40,
+                                    const Icon(
+                                      Icons.stars,
+                                      color: Colors.white,
+                                      size: 30,
                                     ),
                                     const SizedBox(width: 12),
                                     Expanded(
@@ -429,63 +447,57 @@ class _PayrollScreenState extends State<PayrollScreen> {
                         child: Column(
                           children: [
                             _buildBreakdownRow(
-                              "Monthly salary",
-                              "₹${_payrollData?['breakdown']?['monthly_salary'] ?? 0}",
-                              valueColor: Colors.green.shade700,
-                            ),
-                            _buildBreakdownRow(
-                              "Per Day Salary",
-                              "₹${_payrollData?['breakdown']?['per_day_salary'] ?? 0}",
-                            ),
-                            _buildBreakdownRow(
-                              "Days Worked",
-                              "${_payrollData?['breakdown']?['days_worked'] ?? 0}",
-                              valueColor: Colors.black87,
-                            ),
-                            _buildBreakdownRow(
-                              "Bonus",
-                              _payrollData?['breakdown']?['bonus'] == 0 ||
-                                      _payrollData?['breakdown']?['bonus'] ==
-                                          null
-                                  ? "-"
-                                  : "₹${_payrollData?['breakdown']?['bonus']}",
-                            ),
-                            _buildBreakdownRow(
-                              "Allowance",
-                              _payrollData?['breakdown']?['allowance'] == 0 ||
-                                      _payrollData?['breakdown']?['allowance'] ==
-                                          null
-                                  ? "-"
-                                  : "₹${_payrollData?['breakdown']?['allowance']}",
-                            ),
-                            _buildBreakdownRow(
-                              "Incentive",
-                              "₹${_payrollData?['breakdown']?['incentive'] ?? 0}",
-                              valueColor: Colors.orange.shade700,
-                            ),
-                            const Divider(height: 32),
-                            _buildBreakdownRow(
                               "Gross Salary",
-                              "₹${_payrollData?['breakdown']?['gross_salary'] ?? 0}",
+                              "?${_payrollData?['net_pay']?['gross_salary'] ?? 0}",
                               isBold: true,
                               valueColor: Colors.black87,
                             ),
-                            const SizedBox(height: 8),
+                            const Divider(height: 24),
                             _buildBreakdownRow(
-                              "Per Day leave Deduction",
-                              "₹${_payrollData?['breakdown']?['leave_deduction_per_day'] ?? 0}",
-                            ),
-                            _buildBreakdownRow(
-                              "Total Deduction",
-                              "₹${_payrollData?['breakdown']?['total_deduction'] ?? 0}",
+                              "PF Deduction",
+                              "?${_payrollData?['deductions']?['pf_deduction'] ?? 0}",
                               valueColor: Colors.red.shade700,
                             ),
-                            const Divider(height: 32),
                             _buildBreakdownRow(
-                              "Gross Pay",
-                              "₹${_payrollData?['breakdown']?['gross_pay'] ?? 0}",
+                              "ESI Deduction",
+                              "?${_payrollData?['deductions']?['esi_deduction'] ?? 0}",
+                              valueColor: Colors.red.shade700,
+                            ),
+                            _buildBreakdownRow(
+                              "Professional Tax",
+                              "?${_payrollData?['deductions']?['professional_tax'] ?? 0}",
+                              valueColor: Colors.red.shade700,
+                            ),
+                            _buildBreakdownRow(
+                              "Loss of Pay",
+                              "?${_payrollData?['deductions']?['loss_of_pay'] ?? 0}",
+                              valueColor: Colors.red.shade700,
+                            ),
+                            _buildBreakdownRow(
+                              "Advance",
+                              "?${_payrollData?['deductions']?['advance'] ?? 0}",
+                              valueColor: Colors.red.shade700,
+                            ),
+                            const Divider(height: 24),
+                            _buildBreakdownRow(
+                              "Total Deduction",
+                              "?${_payrollData?['net_pay']?['total_deduction'] ?? 0}",
                               isBold: true,
-                              valueColor: Colors.green.shade700,
+                              valueColor: Colors.red.shade700,
+                            ),
+                            const SizedBox(height: 12),
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Colors.green.shade50,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: _buildBreakdownRow(
+                                "Net Paid Amount",
+                                "?${_payrollData?['net_pay']?['net_paid'] ?? 0}",
+                                isBold: true,
+                                valueColor: Colors.green.shade700,
+                              ),
                             ),
                           ],
                         ),
@@ -677,71 +689,26 @@ class _PayrollScreenState extends State<PayrollScreen> {
                 border: pw.TableBorder.all(color: PdfColors.grey300),
                 children: [
                   _buildPdfRow(
-                    'Monthly Salary',
-                    'Rs.${_payrollData?['breakdown']?['monthly_salary'] ?? 0}',
-                    isHeader: false,
+                    'Basic Salary',
+                    'Rs.${_payrollData?['earnings']?['basic_salary'] ?? 0}',
                   ),
                   _buildPdfRow(
-                    'Per Day Salary',
-                    'Rs.${_payrollData?['breakdown']?['per_day_salary'] ?? 0}',
+                    'Incentives',
+                    'Rs.${_payrollData?['earnings']?['incentives'] ?? 0}',
                   ),
-                  _buildPdfRow(
-                    'Days Worked',
-                    '${_payrollData?['breakdown']?['days_worked'] ?? 0}',
-                  ),
-                  _buildPdfRow(
-                    'Bonus',
-                    (_payrollData?['breakdown']?['bonus']?.toString() == '0' ||
-                            _payrollData?['breakdown']?['bonus'] == null)
-                        ? '-'
-                        : 'Rs.${_payrollData?['breakdown']?['bonus']}',
-                  ),
-                  _buildPdfRow(
-                    'Allowance',
-                    (_payrollData?['breakdown']?['allowance']?.toString() ==
-                                '0' ||
-                            _payrollData?['breakdown']?['allowance'] == null)
-                        ? '-'
-                        : 'Rs.${_payrollData?['breakdown']?['allowance']}',
-                  ),
-                  _buildPdfRow(
-                    'Incentive',
-                    'Rs.${_payrollData?['breakdown']?['incentive'] ?? 0}',
-                  ),
-
-                  // Divider
-                  pw.TableRow(
-                    children: [
-                      pw.Container(height: 2, color: PdfColors.grey),
-                      pw.Container(height: 2, color: PdfColors.grey),
-                    ],
-                  ),
-
                   _buildPdfRow(
                     'Gross Salary',
-                    'Rs.${_payrollData?['breakdown']?['gross_salary'] ?? 0}',
+                    'Rs.${_payrollData?['net_pay']?['gross_salary'] ?? 0}',
                     isBold: true,
                   ),
                   _buildPdfRow(
-                    'Per Day Leave Deduction',
-                    'Rs.${_payrollData?['breakdown']?['leave_deduction_per_day'] ?? 0}',
-                  ),
-                  _buildPdfRow(
                     'Total Deduction',
-                    'Rs.${_payrollData?['breakdown']?['total_deduction'] ?? 0}',
+                    'Rs.${_payrollData?['net_pay']?['total_deduction'] ?? 0}',
+                    isBold: true,
                   ),
-
-                  // Divider
-                  pw.TableRow(
-                    children: [
-                      pw.Container(height: 2, color: PdfColors.grey),
-                      pw.Container(height: 2, color: PdfColors.grey),
-                    ],
-                  ),
-
                   _buildPdfRow(
-                    'Gross Pay',
-                    'Rs.${_payrollData?['breakdown']?['gross_pay'] ?? 0}',
+                    'Net Paid',
+                    'Rs.${_payrollData?['net_pay']?['net_paid'] ?? 0}',
                     isBold: true,
                     isTotal: true,
                   ),
@@ -774,7 +741,6 @@ class _PayrollScreenState extends State<PayrollScreen> {
     String label,
     String value, {
     bool isBold = false,
-    bool isHeader = false,
     bool isTotal = false,
   }) {
     return pw.TableRow(

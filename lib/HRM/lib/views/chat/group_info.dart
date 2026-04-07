@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -633,7 +633,7 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
             ),
           ),
           Text(
-            'Group Â· $memberCount Members',
+            'Group · $memberCount Members',
             style: GoogleFonts.poppins(fontSize: 14, color: Colors.grey),
           ),
         ],

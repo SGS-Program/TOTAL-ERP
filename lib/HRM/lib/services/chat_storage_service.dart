@@ -1,11 +1,10 @@
 import 'package:flutter/foundation.dart';
 import 'dart:io';
 import 'package:firebase_storage/firebase_storage.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:path/path.dart' as path;
 
 class ChatStorageService {
-  static FirebaseStorage get _storage => FirebaseStorage.instance;
+  static final FirebaseStorage _storage = FirebaseStorage.instance;
 
   static Future<String?> uploadFile({
     required File file,

@@ -8,6 +8,7 @@ class UniversalAppBar extends StatelessWidget implements PreferredSizeWidget {
   final String? subtitle;
   final bool showBackButton;
   final VoidCallback? onBackTap;
+  final VoidCallback? onProfileTap;
   final List<Widget>? actions;
   final bool isDark;
 
@@ -17,6 +18,7 @@ class UniversalAppBar extends StatelessWidget implements PreferredSizeWidget {
     this.subtitle,
     this.showBackButton = false,
     this.onBackTap,
+    this.onProfileTap,
     this.actions,
     this.isDark = false,
   });
@@ -27,7 +29,7 @@ class UniversalAppBar extends StatelessWidget implements PreferredSizeWidget {
     final titleColor = isDark ? Colors.white : const Color(0xFF1A1F71);
     
     return Container(
-      padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top),
+      padding: EdgeInsets.only(top: MediaQuery.paddingOf(context).top),
       decoration: const BoxDecoration(
         color: Colors.transparent,
       ),
@@ -75,7 +77,7 @@ class UniversalAppBar extends StatelessWidget implements PreferredSizeWidget {
                   ),
                   if (subtitle != null)
                     Text(
-                      subtitle!,
+                      subtitle ?? '',
                       style: GoogleFonts.outfit(
                         color: Colors.grey,
                         fontSize: 10.sp,
@@ -87,9 +89,10 @@ class UniversalAppBar extends StatelessWidget implements PreferredSizeWidget {
               ),
             ),
             
+            // Render custom actions first
             if (actions != null)
-              ...actions!
-            else ...[
+              ...?actions
+            else 
               IconButton(
                 icon: Icon(
                   Icons.notifications_none_rounded,
@@ -98,29 +101,34 @@ class UniversalAppBar extends StatelessWidget implements PreferredSizeWidget {
                 ),
                 onPressed: () {},
               ),
-              GestureDetector(
-                onTap: () {
-                  // Try to open modular drawer first if active, else open host drawer
-                  if (moduleScaffoldKey.currentState?.hasDrawer ?? false) {
-                    moduleScaffoldKey.currentState?.openDrawer();
-                  } else {
-                    final scaffoldState = Scaffold.maybeOf(context);
-                    if (scaffoldState?.hasDrawer ?? false) {
-                      scaffoldState?.openDrawer();
+
+            // Profile Icon (Drawer Trigger) - ALWAYS VISIBLE
+            SizedBox(width: 8.w),
+            GestureDetector(
+              onTap: onProfileTap ?? () {
+                // Try home scaffold first (the one containing UniversalAppBar)
+                final mainScaffold = Scaffold.maybeOf(context);
+                if (mainScaffold != null && mainScaffold.hasDrawer) {
+                  mainScaffold.openDrawer();
+                } else {
+                  // Fallback to the modular key if we are inside a module
+                  try {
+                    if (moduleScaffoldKey.currentState != null && (moduleScaffoldKey.currentState?.hasDrawer ?? false)) {
+                      moduleScaffoldKey.currentState?.openDrawer();
                     }
-                  }
-                },
-                child: CircleAvatar(
-                  radius: 16.r,
-                  backgroundColor: tealColor.withOpacity(0.1),
-                  child: Icon(
-                    Icons.person_rounded,
-                    color: tealColor,
-                    size: 20.sp,
-                  ),
+                  } catch (_) {}
+                }
+              },
+              child: CircleAvatar(
+                radius: 16.r,
+                backgroundColor: tealColor.withOpacity(0.1),
+                child: Icon(
+                  Icons.person_rounded,
+                  color: tealColor,
+                  size: 20.sp,
                 ),
               ),
-            ],
+            ),
           ],
         ),
       ),

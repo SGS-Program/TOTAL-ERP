@@ -39,51 +39,33 @@ class _AppBottomNavState extends State<AppBottomNav> {
 
   @override
   Widget build(BuildContext context) {
-    final double screenWidth = MediaQuery.of(context).size.width;
     return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF26A69A),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.1),
-            blurRadius: 10,
-            offset: const Offset(0, -2),
+      height: 55,
+      decoration: const BoxDecoration(color: Color(0xFF26A69A)),
+      child: Row(
+        children: [
+          _buildNavItem(
+            index: 0,
+            iconPath: "assets/icons/home.png",
+            label: "Home",
+          ),
+          _buildNavItem(
+            index: 1,
+            iconPath: "assets/icons/attendance.png",
+            label: "Attendance",
+          ),
+          _buildNavItem(
+            index: 2,
+            iconPath: "assets/icons/payroll.png",
+            label: "Payroll",
+          ),
+          _buildNavItem(
+            index: 3,
+            iconPath: "assets/icons/chat.png",
+            label: "Chat",
+            isChat: true,
           ),
         ],
-      ),
-      child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8.0),
-          child: Row(
-            children: [
-              _buildNavItem(
-                index: 0,
-                iconPath: "assets/icons/home.png",
-                label: "Home",
-                screenWidth: screenWidth,
-              ),
-              _buildNavItem(
-                index: 1,
-                iconPath: "assets/icons/attendance.png",
-                label: "Attendance",
-                screenWidth: screenWidth,
-              ),
-              _buildNavItem(
-                index: 2,
-                iconPath: "assets/icons/payroll.png",
-                label: "Payroll",
-                screenWidth: screenWidth,
-              ),
-              _buildNavItem(
-                index: 3,
-                iconPath: "assets/icons/chat.png",
-                label: "Chat",
-                isChat: true,
-                screenWidth: screenWidth,
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }
@@ -93,10 +75,8 @@ class _AppBottomNavState extends State<AppBottomNav> {
     required String iconPath,
     required String label,
     bool isChat = false,
-    required double screenWidth,
   }) {
     final isSelected = widget.selectedIndex == index;
-    final color = isSelected ? Colors.white : Colors.white.withValues(alpha: 0.5);
 
     return Expanded(
       child: GestureDetector(
@@ -104,16 +84,15 @@ class _AppBottomNavState extends State<AppBottomNav> {
         child: Container(
           color: Colors.transparent,
           child: Column(
-            mainAxisSize: MainAxisSize.min,
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Stack(
                 clipBehavior: Clip.none,
                 children: [
-                   SizedBox(
-                    height: screenWidth * 0.06,
-                    width: screenWidth * 0.06,
-                    child: Image.asset(iconPath, color: color),
+                  SizedBox(
+                    height: 24,
+                    width: 24,
+                    child: Image.asset(iconPath, color: Colors.white),
                   ),
                   if (isChat && currentUserId != null)
                     Positioned(
@@ -161,10 +140,19 @@ class _AppBottomNavState extends State<AppBottomNav> {
               const SizedBox(height: 4),
               Text(
                 label,
-                style: TextStyle(
-                  color: color,
-                  fontSize: screenWidth * 0.03,
-                  fontWeight: FontWeight.w400,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 3),
+              Container(
+                height: 2,
+                width: 30,
+                decoration: BoxDecoration(
+                  color: isSelected ? Colors.white : Colors.transparent,
+                  borderRadius: BorderRadius.circular(1),
                 ),
               ),
             ],

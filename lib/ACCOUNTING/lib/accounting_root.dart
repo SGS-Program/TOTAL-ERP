@@ -6,13 +6,15 @@ import 'widgets/drawer_screen.dart';
 
 class AccountingRoot extends StatefulWidget {
   final bool isEmbedded;
-  const AccountingRoot({super.key, this.isEmbedded = false});
+  final GlobalKey<ScaffoldState>? scaffoldKey;
+  const AccountingRoot({super.key, this.isEmbedded = false, this.scaffoldKey});
 
   @override
   State<AccountingRoot> createState() => _AccountingRootState();
 }
 
 class _AccountingRootState extends State<AccountingRoot> {
+  final GlobalKey<ScaffoldState> _innerScaffoldKey = GlobalKey<ScaffoldState>();
   int _selectedIndex = 0;
 
   final List<String> _titles = [
@@ -32,10 +34,13 @@ class _AccountingRootState extends State<AccountingRoot> {
   @override
   Widget build(BuildContext context) {
     const tealColor = Color(0xFF26A69A);
+    final effectiveKey = widget.scaffoldKey ?? _innerScaffoldKey;
     
     return Scaffold(
+      key: effectiveKey,
       backgroundColor: const Color(0xFFF5F7FA),
-      drawer: widget.isEmbedded ? null : const AccountingDrawer(),
+      drawer: const AccountingDrawer(),
+      drawerEnableOpenDragGesture: !widget.isEmbedded,
       appBar: widget.isEmbedded ? null : AppBar(
         backgroundColor: tealColor,
         elevation: 0,

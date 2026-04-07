@@ -1,12 +1,10 @@
-import 'dart:io';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import 'package:geolocator/geolocator.dart';
-import 'package:device_info_plus/device_info_plus.dart';
-import 'leave_management.dart';
+import 'package:hrm/views/home_screen/leave_management.dart';
 
 extension TimeOfDayExtension on TimeOfDay {
   String format12Hour() {
@@ -64,11 +62,17 @@ class _PermissionFormState extends State<PermissionForm> {
 
   Future<void> _fetchUserData() async {
     final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      employeeName = prefs.getString('name');
-      uid = prefs.getInt('uid')?.toString();
-      employeeId = uid;
-    });
+    if (mounted) {
+      setState(() {
+        employeeName = prefs.getString('name');
+        uid =
+            prefs.getString('login_cus_id') ??
+            prefs.getString('employee_table_id') ??
+            prefs.getInt('uid')?.toString() ??
+            "";
+        employeeId = uid;
+      });
+    }
     _fetchPermissionTypes();
   }
 
@@ -118,23 +122,19 @@ class _PermissionFormState extends State<PermissionForm> {
     try {
       final prefs = await SharedPreferences.getInstance();
       final String uidParam =
-          prefs.getInt('uid')?.toString() ?? "10"; // Default or fallback
+          prefs.getString('login_cus_id') ??
+          prefs.getString('server_uid') ??
+          prefs.getString('employee_table_id') ??
+          prefs.getInt('uid')?.toString() ??
+          "";
       final String cid = prefs.getString('cid') ?? "";
 
-      // 1. Get Device ID
-      String deviceId = "unknown";
-      final deviceInfo = DeviceInfoPlugin();
-      if (Platform.isAndroid) {
-        final androidInfo = await deviceInfo.androidInfo;
-        deviceId = androidInfo.id;
-      } else if (Platform.isIOS) {
-        final iosInfo = await deviceInfo.iosInfo;
-        deviceId = iosInfo.identifierForVendor ?? "unknown";
-      }
-
-      // 2. Get Location (Lat/Lng only, No Address/Loc as per new request)
-      String lat = "0.0";
-      String lng = "0.0";
+      // 1. Get Device ID from prefs or fallback
+      String deviceId = prefs.getString('device_id') ?? "unknown";
+      
+      // 2. Get Location (Lat/Lng from prefs or determine live)
+      String lat = prefs.getDouble('lat')?.toString() ?? "";
+      String lng = prefs.getDouble('lng')?.toString() ?? "";
 
       try {
         Position? pos = await _determinePosition();
@@ -159,6 +159,7 @@ class _PermissionFormState extends State<PermissionForm> {
         "type": "2067",
         "cid": cid,
         "uid": uidParam,
+        "id": uidParam, // Explicitly include 'id' for redundancy
         "permission_type": selectedPermissionCode ?? "",
         "app_date":
             "${selectedDate!.year}-${selectedDate!.month.toString().padLeft(2, '0')}-${selectedDate!.day.toString().padLeft(2, '0')}",
@@ -168,7 +169,7 @@ class _PermissionFormState extends State<PermissionForm> {
         "device_id": deviceId,
         "lt": lat,
         "ln": lng,
-        "token": "", // From user example
+        "token": prefs.getString('token') ?? "", // Pass token if present
       };
 
       debugPrint("Permission API Request Body: $body");

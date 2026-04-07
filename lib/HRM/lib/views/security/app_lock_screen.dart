@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_screen_lock/flutter_screen_lock.dart';
@@ -112,13 +112,13 @@ class _AppLockScreenState extends State<AppLockScreen>
                     child: IntrinsicHeight(
                       child: Column(
                         children: [
-                          // â”€â”€â”€ HEADER â”€â”€â”€
+                          // ─── HEADER ───
                           Padding(
                             padding: const EdgeInsets.only(top: 32, bottom: 8),
                             child: _buildHeader(biometricOnlyMode),
                           ),
 
-                          // â”€â”€â”€ BODY â”€â”€â”€
+                          // ─── BODY ───
                           Expanded(
                             child: biometricOnlyMode
                                 ? _buildBiometricOnlyUI()
@@ -137,7 +137,7 @@ class _AppLockScreenState extends State<AppLockScreen>
     );
   }
 
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ HEADER â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─────────────────────────── HEADER ───────────────────────────
   Widget _buildHeader(bool biometricOnlyMode) {
     return Column(
       children: [
@@ -204,7 +204,7 @@ class _AppLockScreenState extends State<AppLockScreen>
     );
   }
 
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ PIN LOCK UI â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─────────────────────────── PIN LOCK UI ───────────────────────────
   Widget _buildPinLockUI() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -275,7 +275,7 @@ class _AppLockScreenState extends State<AppLockScreen>
     );
   }
 
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ AUTH ICONS (inside PIN pad) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─────────────────────────── AUTH ICONS (inside PIN pad) ───────────────────────────
   Widget _buildPinAuthIcons() {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
@@ -302,7 +302,7 @@ class _AppLockScreenState extends State<AppLockScreen>
     );
   }
 
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ BIOMETRIC-ONLY UI â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─────────────────────────── BIOMETRIC-ONLY UI ───────────────────────────
   Widget _buildBiometricOnlyUI() {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
@@ -365,7 +365,7 @@ class _AppLockScreenState extends State<AppLockScreen>
     );
   }
 
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ REUSABLE WIDGETS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─────────────────────────── REUSABLE WIDGETS ───────────────────────────
 
   Widget _buildBigPulseIcon({
     required IconData icon,

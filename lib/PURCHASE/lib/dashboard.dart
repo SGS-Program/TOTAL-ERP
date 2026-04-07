@@ -17,7 +17,8 @@ import 'package:purchase_erp/widgets/drawer_screen.dart';
 
 class Dashboard extends StatefulWidget {
   final bool isEmbedded;
-  const Dashboard({super.key, this.isEmbedded = false});
+  final GlobalKey<ScaffoldState>? scaffoldKey;
+  const Dashboard({super.key, this.isEmbedded = false, this.scaffoldKey});
 
   @override
   State<Dashboard> createState() => _DashboardState();
@@ -26,12 +27,16 @@ class Dashboard extends StatefulWidget {
 class _DashboardState extends State<Dashboard> {
   @override
   Widget build(BuildContext context) {
+    final effectiveKey = widget.scaffoldKey ?? GlobalKey<ScaffoldState>();
     final size = MediaQuery.of(context).size;
     final width = size.width;
     final height = size.height;
 
     return Scaffold(
+      key: effectiveKey,
       backgroundColor: Colors.grey[100],
+      drawer: const PurchaseDrawer(),
+      drawerEnableOpenDragGesture: !widget.isEmbedded,
       appBar: widget.isEmbedded
           ? null
           : AppBar(
@@ -75,7 +80,6 @@ class _DashboardState extends State<Dashboard> {
                 const SizedBox(width: 16),
               ],
             ),
-      drawer: widget.isEmbedded ? null : const PurchaseDrawer(),
       bottomNavigationBar: const CustomBottomNavBar(selectedIndex: 0),
 
       body: SingleChildScrollView(

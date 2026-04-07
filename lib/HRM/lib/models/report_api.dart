@@ -1,9 +1,8 @@
-﻿import 'package:flutter/foundation.dart';
 import 'dart:convert';
-import 'package:http/http.dart' as http;
+import '../services/api_client.dart';
 
 class ReportApi {
-  static const String baseUrl = "https://erpsmart.in/total/api/m_api/";
+  static final ApiClient _apiClient = ApiClient();
 
   static Future<Map<String, dynamic>> fetchReport({
     required String cid,
@@ -16,23 +15,19 @@ class ReportApi {
     String type = "2070",
   }) async {
     try {
-      final response = await http.post(
-        Uri.parse(baseUrl),
-        body: {
+      final response = await _apiClient.post({
           'cid': cid,
           'uid': uid,
+          'id': uid, // Mirror for backward compatibility
           'device_id': deviceId,
           'lt': lat,
           'ln': lng,
           'type': type,
           'report_type': reportType,
           'month': month,
-        },
-      );
+      });
 
       if (response.statusCode == 200) {
-        // Log the response to help debugging
-        debugPrint("Report API Response: ${response.body}");
         return jsonDecode(response.body);
       } else {
         return {
@@ -45,5 +40,3 @@ class ReportApi {
     }
   }
 }
-
-

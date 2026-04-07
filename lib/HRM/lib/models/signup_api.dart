@@ -1,9 +1,8 @@
 import 'dart:convert';
-import 'package:http/http.dart' as http;
+import '../services/api_client.dart';
 
 class SignupApi {
-  static const String baseUrl =
-      "https://erpsmart.in/total/api/m_api/";
+  static final ApiClient _apiClient = ApiClient();
 
   static Future<Map<String, dynamic>> signup({
     required String name,
@@ -16,12 +15,7 @@ class SignupApi {
     required String lat,
     required String lng,
   }) async {
-    final response = await http.post(
-      Uri.parse(baseUrl),
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: jsonEncode({
+    final response = await _apiClient.postJson({
         "name": name,
         "mobile": mobile,
         "w_number": whatsapp,
@@ -31,8 +25,7 @@ class SignupApi {
         "device_id": deviceId,
         "ln": lng,
         "lt": lat,
-      }),
-    );
+    });
 
     return jsonDecode(response.body);
   }

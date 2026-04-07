@@ -1,27 +1,23 @@
 import 'dart:async';
-import 'dart:io';
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'login_types.dart';
 import '../home/home.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:geolocator/geolocator.dart';
-import '../../utils/localization.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../Models/erp_login_api.dart';
 
 class VerifyWithOtp extends StatefulWidget {
   final String contactInfo;
   final LoginType type;
   final String? otp;
+  final VoidCallback? onVerified;
 
   const VerifyWithOtp({
     super.key,
     required this.contactInfo,
     required this.type,
     this.otp,
+    this.onVerified,
   });
 
   @override
@@ -35,27 +31,19 @@ class _VerifyWithOtpState extends State<VerifyWithOtp> {
   int _timerSeconds = 57;
   Timer? _timer;
   bool _isLoading = false;
-  String _serverUrl = 'https://erpsmart.in/total/api/m_api/';
 
   @override
   void initState() {
     super.initState();
     _startTimer();
-    _loadServerUrl();
+    _loadInitialData();
   }
 
-  Future<void> _loadServerUrl() async {
-    final prefs = await SharedPreferences.getInstance();
-    if (mounted) {
-      setState(() {
-        _serverUrl = prefs.getString('server_url') ?? 'https://erpsmart.in/total/api/m_api/';
-      });
-    }
-
-    if (widget.otp != null && widget.otp!.length == 6) {
+  void _loadInitialData() {
+    if (widget.otp != null && (widget.otp?.length ?? 0) == 6) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         for (int i = 0; i < 6; i++) {
-          _controllers[i].text = widget.otp![i];
+          _controllers[i].text = (widget.otp ?? '')[i];
         }
       });
     }
@@ -84,28 +72,38 @@ class _VerifyWithOtpState extends State<VerifyWithOtp> {
       final prefs = await SharedPreferences.getInstance();
       String ln = prefs.getString('ln') ?? '145';
       String lt = prefs.getString('lt') ?? '123';
-      final deviceId = prefs.get('device_id')?.toString() ?? '1';
+      final deviceId = prefs.getString('device_id') ?? '1';
+      final cid = prefs.getString('cid') ?? '21472147';
 
-      var request = http.MultipartRequest('POST', Uri.parse(_serverUrl));
-      request.fields['type'] = '5001';
-      request.fields['ln'] = ln;
-      request.fields['lt'] = lt;
-      request.fields['device_id'] = deviceId;
-      request.fields['mobile'] = widget.contactInfo;
+      final response = await ErpLoginApi.sendOtp(
+        mobile: widget.contactInfo,
+        cid: cid,
+        deviceId: deviceId,
+        lat: lt,
+        lng: ln,
+      );
 
-      var response = await request.send();
-      var responseString = await response.stream.bytesToString();
-      var jsonResponse = json.decode(responseString);
-
-      if (jsonResponse['error'] == false) {
+      if (response['error'] == false) {
         setState(() => _timerSeconds = 57);
         _startTimer();
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('OTP Resent Successfully'), backgroundColor: Colors.green));
+        if (mounted) {
+           ScaffoldMessenger.of(context).showSnackBar(
+             const SnackBar(content: Text('OTP Resent Successfully'), backgroundColor: Colors.green)
+           );
+        }
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(jsonResponse['error_msg'] ?? 'Resend failed'), backgroundColor: Colors.redAccent));
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(response['error_msg'] ?? 'Resend failed'), backgroundColor: Colors.redAccent)
+          );
+        }
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Network error, please try again'), backgroundColor: Colors.redAccent));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Network error, please try again'), backgroundColor: Colors.redAccent)
+        );
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -177,32 +175,42 @@ class _VerifyWithOtpState extends State<VerifyWithOtp> {
       final prefs = await SharedPreferences.getInstance();
       String ln = prefs.getString('ln') ?? '145';
       String lt = prefs.getString('lt') ?? '123';
-      final deviceId = prefs.get('device_id')?.toString() ?? '1';
+      final deviceId = prefs.getString('device_id') ?? '1';
       final cid = prefs.getString('cid') ?? '';
       final token = prefs.getString('f_token') ?? '';
 
-      var request = http.MultipartRequest('POST', Uri.parse(_serverUrl));
-      request.fields['type'] = '5002';
-      request.fields['ln'] = ln;
-      request.fields['lt'] = lt;
-      request.fields['device_id'] = deviceId;
-      request.fields['mobile'] = prefs.getString('mobile') ?? widget.contactInfo;
-      request.fields['cid'] = cid;
-      request.fields['otp'] = enteredOtp;
-      request.fields['token'] = token;
+      final response = await ErpLoginApi.verifyOtp(
+        mobile: prefs.getString('mobile') ?? widget.contactInfo,
+        otp: enteredOtp,
+        cid: cid,
+        token: token,
+        deviceId: deviceId,
+        lat: lt,
+        lng: ln,
+      );
 
-      var response = await request.send();
-      var responseString = await response.stream.bytesToString();
-      var jsonResponse = json.decode(responseString);
-
-      if (jsonResponse['error'] == false) {
+      if (response['error'] == false) {
         await prefs.setBool('is_logged_in', true);
-        if (mounted) Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (context) => const HomeScreen()), (r) => false);
+        await prefs.setString('token', response['token']?.toString() ?? token);
+        await prefs.setString('login_cus_id', response['cus_id']?.toString() ?? '');
+        
+        if (mounted) {
+          if (widget.onVerified != null) {
+            Navigator.pop(context);
+            widget.onVerified?.call();
+          } else {
+            Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (context) => const HomeScreen()), (r) => false);
+          }
+        }
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(jsonResponse['message'] ?? 'Invalid OTP')));
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(response['message'] ?? 'Invalid OTP')));
+        }
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Verification failed')));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Verification failed')));
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }

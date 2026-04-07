@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:hrm/models/report_api.dart';
 import 'package:pie_chart/pie_chart.dart';
@@ -168,7 +168,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
       performanceRemarks = mainData['performance']['remarks'] ?? "";
     }
 
-    // ✅ Process List Data (daily_records or details)
+    // ? Process List Data (daily_records or details)
     final List<dynamic> records =
         mainData['daily_records'] ?? mainData['details'] ?? [];
 
@@ -813,7 +813,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
               const SizedBox(height: 24),
 
-              // ✅ Detailed History (Attendance or Leave)
+              // ? Detailed History (Attendance or Leave)
               if (leaveHistory.isNotEmpty) ...[
                 Text(
                   selectedReportType == 'Leave'

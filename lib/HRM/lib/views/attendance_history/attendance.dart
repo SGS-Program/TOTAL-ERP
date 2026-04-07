@@ -48,7 +48,7 @@ class AttendanceScreenState extends State<AttendanceScreen> {
   Duration breakDuration = Duration.zero;
   Duration totalBreakDuration = Duration.zero;
   bool isLoading = false;
-  int uid = 4; // User ID
+  String uid = ""; // Session UID (Original Login ID)
   String? serverUidString; // To store the original value from server
   String userName = "User";
   String profilePhoto = "";
@@ -68,34 +68,239 @@ class AttendanceScreenState extends State<AttendanceScreen> {
   Map<String, dynamic>? attendanceHistory;
 
   bool isHistoryLoading = false;
-  String leaveTakenStr = "0"; // To store total leave taken count
-  String lopTakenStr = "0"; // To store LOP count
+  bool isBreakHistoryLoading = false;
+  String leaveTakenStr = "0";
+  String lopTakenStr = "0";
+  int daysWorked = 0; // Monthly approved days (both in+out valid)
+  int weeklyDaysWorked = 0; // Weekly approved days (within current Mon-Sun)
+
+  Timer? _syncTimer;
 
   @override
   void initState() {
     super.initState();
-    _loadUid();
-    _loadEmployeeData();
-    _getDeviceId().then((_) {
-      _fetchAttendanceSummary();
-      _fetchLeaveStatistics(); // Calling Leave API separately for accurate stats
-    });
+    _initializeApp();
+  }
+
+  Future<void> _initializeApp() async {
+    // 1. Load basic local data immediately (No network, very fast)
+    final prefs = await SharedPreferences.getInstance();
+
+    // 🚨 STRICT RESET: Start with false, then verify from local storage
+    if (mounted) {
+      setState(() {
+        isCheckedIn = false;
+        isTodayFinished = false;
+
+        final String today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+        final String lastCheckIn = prefs.getString('last_checkin_date') ?? "";
+        final String lastCheckOut = prefs.getString('last_checkout_date') ?? "";
+
+        if (lastCheckIn == today && lastCheckOut != today) {
+          isCheckedIn = true;
+        } else if (lastCheckOut == today) {
+          isTodayFinished = true;
+        }
+      });
+    }
+
+    await _loadUid();
+
+    // 2. Start all network calls in parallel to improve performance
+    setState(() => isHistoryLoading = true);
+
+    _getDeviceId(); // Non-blocking
+
+    try {
+      // Parallel execution of independent APIs
+      await Future.wait([
+        _loadEmployeeData(),
+        _fetchAttendanceSummary(),
+        _fetchLeaveStatistics(),
+        _fetchBreakHistory(),
+      ]);
+    } catch (e) {
+      debugPrint("Parallel initialization error: $e");
+    } finally {
+      if (mounted) {
+        setState(() => isHistoryLoading = false);
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _syncTimer?.cancel();
+    breakTimer?.cancel();
+    purposeController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _fetchBreakHistory({VoidCallback? onUpdate}) async {
+    if (!mounted) return;
+    setState(() => isBreakHistoryLoading = true);
+    if (onUpdate != null) onUpdate();
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final String? sessionToken = prefs.getString('token');
+      final lat = prefs.getDouble('lat')?.toString() ?? "0.0";
+      final lng = prefs.getDouble('lng')?.toString() ?? "0.0";
+      final dId = prefs.getString('device_id') ?? deviceId ?? "";
+
+      final body = {
+        "type": "2079",
+        "cid": cid,
+        "uid": uid.toString(),
+        "id": uid.toString(), // Alias for consistency
+        "device_id": dId,
+        "lt": lat,
+        "ln": lng,
+        if (sessionToken != null && sessionToken.isNotEmpty)
+          "token": sessionToken,
+      };
+
+      debugPrint("BREAK HISTORY REQUEST (2079) => $body");
+
+      final response = await http.post(
+        Uri.parse("https://erpsmart.in/total/api/m_api/"),
+        body: body,
+      );
+
+      debugPrint("BREAK HISTORY RESPONSE (2079) => ${response.body}");
+      final data = jsonDecode(response.body);
+
+      if (data["error"] == false || data["error"] == "false") {
+        final dynamic rawData = data["data"];
+        List<dynamic> recordsList = [];
+        if (rawData is List) {
+          recordsList = rawData;
+        }
+
+        final summary = data["summary"] ?? {};
+
+        setState(() {
+          breakHistory = recordsList
+              .where((item) => item != null && item is Map)
+              .map((item) {
+                DateTime inTime =
+                    DateTime.tryParse(item["break_in"] ?? "") ?? DateTime.now();
+                DateTime? outTime = item["break_out"] != null
+                    ? DateTime.tryParse(item["break_out"])
+                    : null;
+
+                return BreakEntry(
+                  purpose: item["reason"] ?? "Tea",
+                  breakInTime: inTime,
+                  breakOutTime: outTime,
+                  duration: Duration(
+                    minutes:
+                        int.tryParse(
+                          item["duration_minutes"]?.toString() ?? "0",
+                        ) ??
+                        0,
+                  ),
+                );
+              })
+              .toList();
+
+          totalBreakDuration = Duration(
+            minutes:
+                int.tryParse(
+                  summary["total_duration_minutes"]?.toString() ?? "0",
+                ) ??
+                0,
+          );
+        });
+      }
+    } catch (e) {
+      debugPrint("Error fetching break history: $e");
+    } finally {
+      if (mounted) {
+        setState(() => isBreakHistoryLoading = false);
+        if (onUpdate != null) onUpdate();
+      }
+    }
+  }
+
+  void _showSessionErrorDialog() {
+    if (mounted) {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text("Session Issue"),
+          content: const Text(
+            "Your session is invalid or expired. You may need to login again to continue.",
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("OK"),
+            ),
+          ],
+        ),
+      );
+    }
   }
 
   Future<void> _loadUid() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
-      uid = prefs.getInt('uid') ?? 4;
+      // ✅ Standardized UID priority: login_cus_id (Primary)
+      uid =
+          prefs.getString('login_cus_id') ??
+          prefs.getString('server_uid') ??
+          prefs.getString('employee_table_id') ??
+          prefs.getInt('uid')?.toString() ??
+          "";
       cid = prefs.getString('cid') ?? "";
-      serverUidString = prefs.getString('server_uid');
-      isCheckedIn = prefs.getBool('isCheckedIn') ?? false;
+      serverUidString = prefs.getString('server_uid') ?? uid;
       userName = prefs.getString('name') ?? "User";
       employeeName = prefs.getString('name');
       employeeCode = prefs.getString('employee_code');
       profilePhoto = prefs.getString('profile_photo') ?? "";
       deviceId = prefs.getString('device_id') ?? "";
+
       final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
-      isTodayFinished = prefs.getString('last_checkout_date') == today;
+      final lastCheckIn = prefs.getString('last_checkin_date');
+      final lastCheckOut = prefs.getString('last_checkout_date');
+
+      // Reset isCheckedIn if it's a new day
+      if (lastCheckIn == today && lastCheckOut != today) {
+        isCheckedIn = true;
+      } else {
+        isCheckedIn = false;
+        // Also clear local persistent state if it's stale
+        if (lastCheckIn != today) {
+          prefs.setBool('isCheckedIn', false);
+        }
+      }
+
+      isTodayFinished = lastCheckOut == today;
+
+      // Restore Break state
+      bool isOnBreakStored = prefs.getBool('is_on_break') ?? false;
+
+      // ✅ RELAXED SYNC: Always try to restore break if it's in local memory
+      if (isOnBreakStored) {
+        String? startTimeStr = prefs.getString('break_start_time');
+        if (startTimeStr != null) {
+          try {
+            DateTime startTime = DateTime.parse(startTimeStr);
+            currentBreakInTime = startTime;
+            breakSwitch = true;
+            currentBreakId = prefs.getInt('current_break_id') ?? currentBreakId;
+            breakPurpose = prefs.getString('break_purpose') ?? "Tea";
+            breakDuration = DateTime.now().difference(startTime);
+            startBreakTimer();
+          } catch (e) {
+            debugPrint("Error restoring break timer: $e");
+          }
+        }
+      } else {
+        breakSwitch = false;
+        breakDuration = Duration.zero;
+      }
     });
     debugPrint(
       "LOADED INITIAL STATE: deviceId=$deviceId, isCheckedIn=$isCheckedIn, uid=$uid, cid=$cid",
@@ -106,7 +311,12 @@ class AttendanceScreenState extends State<AttendanceScreen> {
     final prefs = await SharedPreferences.getInstance();
 
     // 1. Get identifiers from SharedPreferences
-    final storedUid = prefs.getInt('uid') ?? 0;
+    final String storedUid =
+        prefs.getString('login_cus_id') ??
+        prefs.getString('server_uid') ??
+        prefs.getString('employee_table_id') ??
+        prefs.getInt('uid')?.toString() ??
+        "";
     final storedCid = prefs.getString('cid') ?? "";
     final storedCode = prefs.getString('employee_code');
     final storedName = prefs.getString('name');
@@ -142,22 +352,29 @@ class AttendanceScreenState extends State<AttendanceScreen> {
         debugPrint("FULL SYNC RESPONSE: ${jsonEncode(res)}");
         final data = res["data"] ?? res;
 
+        // UPDATE TOKEN IF RETURNED
+        final String? newToken = res["token"] ?? data["token"];
+        if (newToken != null && newToken.isNotEmpty) {
+          await prefs.setString('token', newToken);
+          debugPrint("Employee Sync: New Session Token Saved => $newToken");
+        }
+
         // Multi-Identifier Discovery
         String? foundId = data["id"]?.toString(); // Numeric DB ID
-        String? foundUid = data["uid"]?.toString(); // Potential String UID/Code
+        String? foundUid = data["uid"]
+            ?.toString(); // Potential String UID/Code (e.g. 31)
 
         final String? serverCid =
             data["cid"]?.toString() ?? data["cus_id"]?.toString();
         final String? serverName = data["name"]?.toString();
 
         debugPrint(
-          "IDENTIFIED => Record ID: $foundId, Server UID: $foundUid, CID: $serverCid",
+          "IDENTIFIED => Record ID: $foundId, Server UID: $foundUid, CID: $serverCid, Current Auth UID: $uid",
         );
 
         setState(() {
-          if (foundId != null && foundId != "null" && foundId.isNotEmpty) {
-            uid = int.tryParse(foundId) ?? uid;
-          }
+          // IMPORTANT: Do NOT overwrite the login 'uid' (e.g. 78) with record 'id' (92)
+          // Most APIs expect the login identifier (78) as 'uid'
           if (foundUid != null && foundUid != "null") {
             serverUidString = foundUid;
           }
@@ -178,8 +395,7 @@ class AttendanceScreenState extends State<AttendanceScreen> {
           }
         });
 
-        // Persist synced identifiers
-        await prefs.setInt('uid', uid);
+        // Persist synced identifiers (preserving the main UID from login)
         await prefs.setString('cid', cid);
         if (serverUidString != null) {
           await prefs.setString('server_uid', serverUidString!);
@@ -295,15 +511,19 @@ class AttendanceScreenState extends State<AttendanceScreen> {
       final lng = prefs.getDouble('lng')?.toString() ?? "0.0";
       final dId = prefs.getString('device_id') ?? deviceId ?? "";
 
+      final String? sessionToken = prefs.getString('token');
+
       final body = {
         "type": "2064",
         "cid": cid,
-        "uid": uid.toString(),
+        "uid": uid, // Standardized session UID (Priority: login_cus_id)
+        "id": uid, // Alias for backward compatibility
         "device_id": dId,
         "lt": lat,
         "ln": lng,
-        if (prefs.getString('token') != null)
-          "token": prefs.getString('token')!,
+        "report_type": "attendance",
+        if (sessionToken != null && sessionToken.isNotEmpty)
+          "token": sessionToken,
       };
 
       debugPrint("ATTENDANCE SUMMARY REQUEST => $body");
@@ -318,6 +538,35 @@ class AttendanceScreenState extends State<AttendanceScreen> {
 
       if (data["error"] == false || data["error"] == "false") {
         if (mounted) {
+          final dynamic rawRecords = data["data"];
+          List<dynamic> records = [];
+          if (rawRecords is List) {
+            records = rawRecords;
+          }
+
+          final String today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+
+          final todayRecord = records.firstWhere(
+            (e) => e != null && e is Map && e["date"] == today,
+            orElse: () => null,
+          );
+
+          final bool serverSaysOnBreak =
+              todayRecord != null &&
+              (todayRecord["status"]?.toString().toLowerCase() ?? "").contains(
+                "break",
+              );
+
+          // Helper to check if a time is valid (not empty and not a dummy value)
+          bool isTimeValid(dynamic time) {
+            if (time == null) return false;
+            String t = time.toString().trim().toLowerCase();
+            return t.isNotEmpty &&
+                t != "null" &&
+                t != "00:00:00" &&
+                t != "00:00";
+          }
+
           setState(() {
             if (data["statistics"] != null) {
               attendanceHistory = Map<String, dynamic>.from(data["statistics"]);
@@ -325,38 +574,158 @@ class AttendanceScreenState extends State<AttendanceScreen> {
               attendanceHistory = {};
             }
 
-            // Sync isCheckedIn status with today's record from server
-            final List<dynamic> records = data["data"] ?? [];
-            final String today = DateFormat('yyyy-MM-dd').format(DateTime.now());
-
-            final todayRecord = records.firstWhere(
-              (e) => e["date"] == today,
-              orElse: () => null,
-            );
-
             if (todayRecord != null) {
-              final String inTime = todayRecord["in_time"]?.toString() ?? "";
-              final String outTime = todayRecord["out_time"]?.toString() ?? "";
+              final String inTimeStr = todayRecord["in_time"]?.toString() ?? "";
+              final String outTimeStr =
+                  todayRecord["out_time"]?.toString() ?? "";
 
-              if (inTime.isNotEmpty && outTime.isEmpty) {
+              final bool hasIn = isTimeValid(inTimeStr);
+              final bool hasOut = isTimeValid(outTimeStr);
+
+              if (hasIn && !hasOut) {
+                // ✅ DATABASE SAYS: CHECKED IN
                 isCheckedIn = true;
                 isTodayFinished = false;
-              } else if (inTime.isNotEmpty && outTime.isNotEmpty) {
+
+                // ✅ ABSOLUTE SERVER SYNC: Break status
+                if (serverSaysOnBreak) {
+                  breakSwitch = true;
+                  prefs.setBool('is_on_break', true);
+
+                  // If timer wasn't running, start it using LOCAL PREFS as source (more accurate)
+                  if (breakTimer == null || !breakTimer!.isActive) {
+                    try {
+                      String? savedStartTime = prefs.getString(
+                        'break_start_time',
+                      );
+                      if (savedStartTime != null) {
+                        DateTime startTime = DateTime.parse(savedStartTime);
+                        currentBreakInTime = startTime;
+                        breakDuration = DateTime.now().difference(startTime);
+                        startBreakTimer();
+                      } else {
+                        // Fallback to server time reconstruction if local is empty
+                        String inTimeStr =
+                            todayRecord["in_time"]?.toString() ?? "";
+                        if (inTimeStr.isNotEmpty && inTimeStr.contains(":")) {
+                          final now = DateTime.now();
+                          final parts = inTimeStr.split(':');
+                          DateTime serverInTime = DateTime(
+                            now.year,
+                            now.month,
+                            now.day,
+                            int.parse(parts[0]),
+                            int.parse(parts[1]),
+                            parts.length > 2 ? int.parse(parts[2]) : 0,
+                          );
+                          currentBreakInTime = serverInTime;
+                          breakDuration = DateTime.now().difference(
+                            serverInTime,
+                          );
+                          startBreakTimer();
+                        }
+                      }
+                    } catch (e) {
+                      debugPrint("Timer reconstruction error: $e");
+                    }
+                  }
+                } else {
+                  // ✅ SAFE STOP: Only stop break if local prefs ALSO say not on break.
+                  // This prevents server lag from resetting an active break session.
+                  final bool localSaysOnBreak =
+                      prefs.getBool('is_on_break') ?? false;
+                  if (!localSaysOnBreak) {
+                    breakSwitch = false;
+                    stopBreakTimer();
+                  }
+                  // If localSaysOnBreak is true, keep break running — local wins
+                }
+              } else if (hasIn && hasOut) {
+                // ✅ DATABASE SAYS: COMPLETED (CHECKED OUT)
                 isCheckedIn = false;
                 isTodayFinished = true;
+                breakSwitch = false;
+                stopBreakTimer();
               } else {
+                // ✅ DATABASE SAYS: NO RECORD FOR TODAY
                 isCheckedIn = false;
                 isTodayFinished = false;
+                breakSwitch = false;
+                stopBreakTimer();
               }
-
-              // Update local storage to match server
-              _syncLocalAttendanceState(today, inTime, outTime);
             } else {
-              // No record for today found on server
+              // ✅ DATABASE SAYS: NO RECORD FOR TODAY - DEEP RESET
               isCheckedIn = false;
               isTodayFinished = false;
+              breakSwitch = false;
+              stopBreakTimer();
+
+              // Update local state immediately
+              prefs.setBool('isCheckedIn', false);
+              prefs.setBool('is_on_break', false);
+              prefs.remove('last_checkin_date');
+              prefs.remove('last_checkout_date');
+              prefs.remove('break_start_time');
             }
           });
+
+          // Compute daysWorked (monthly) and weeklyDaysWorked from records
+          final now = DateTime.now();
+          final weekMondayDate = now.subtract(Duration(days: now.weekday - 1));
+          final weekStart = DateTime(
+            weekMondayDate.year,
+            weekMondayDate.month,
+            weekMondayDate.day,
+          );
+
+          int workedCount = 0;
+          int weeklyCount = 0;
+          for (final r in records) {
+            if (r == null || r is! Map) continue;
+            if (!isTimeValid(r["in_time"]) || !isTimeValid(r["out_time"]))
+              continue;
+            workedCount++;
+            final String? dateStr = r["date"]?.toString();
+            if (dateStr != null) {
+              final DateTime? recDate = DateTime.tryParse(dateStr);
+              if (recDate != null && !recDate.isBefore(weekStart)) {
+                weeklyCount++;
+              }
+            }
+          }
+
+          if (mounted) {
+            setState(() {
+              daysWorked = workedCount;
+              weeklyDaysWorked = weeklyCount;
+            });
+          }
+
+          // Perform async local sync outside of setState
+          if (todayRecord != null) {
+            final String inTime = todayRecord["in_time"]?.toString() ?? "";
+            final String outTime = todayRecord["out_time"]?.toString() ?? "";
+
+            // Sync Break Status to SharedPreferences:
+            // IF server says we are on break, definitely save it.
+            // DO NOT explicitly remove 'is_on_break' here if it's currently TRUE locally,
+            // as the server status string might lag by a few seconds.
+            if (serverSaysOnBreak) {
+              await prefs.setBool('is_on_break', true);
+            }
+
+            if (inTime.isNotEmpty && outTime.isNotEmpty) {
+              await prefs.remove('is_on_break');
+            }
+            _syncLocalAttendanceState(today, inTime, outTime);
+          }
+
+          // UPDATE TOKEN IF RETURNED
+          final String? newToken = data["token"] ?? data["data"]?["token"];
+          if (newToken != null && newToken.isNotEmpty) {
+            await prefs.setString('token', newToken);
+            debugPrint("Summary: New Session Token Saved => $newToken");
+          }
         }
       } else {
         debugPrint(
@@ -399,16 +768,18 @@ class AttendanceScreenState extends State<AttendanceScreen> {
       final lng = prefs.getDouble('lng')?.toString() ?? "0.0";
       final dId = prefs.getString('device_id') ?? deviceId ?? "";
 
+      final String? sessionToken = prefs.getString('token');
+
       final body = {
         "type": "2052",
         "cid": cid,
-        "uid": uid.toString(),
-        "id": uid.toString(),
+        "uid": uid.toString(), // Primary Auth UID (Priority: login_cus_id)
+        "id": uid.toString(), // Alias for backward compatibility
         "device_id": dId,
         "lt": lat,
         "ln": lng,
-        if (prefs.getString('token') != null)
-          "token": prefs.getString('token')!,
+        if (sessionToken != null && sessionToken.isNotEmpty)
+          "token": sessionToken,
       };
 
       debugPrint("LEAVE STATISTICS REQUEST => $body");
@@ -443,6 +814,7 @@ class AttendanceScreenState extends State<AttendanceScreen> {
         if (data['leave_summary'] != null && data['leave_summary'] is List) {
           summaryList = data['leave_summary'];
           for (var item in summaryList) {
+            if (item == null) continue;
             String name = (item['leave_type_name'] ?? item['leave_type'] ?? "")
                 .toString()
                 .toLowerCase()
@@ -574,18 +946,18 @@ class AttendanceScreenState extends State<AttendanceScreen> {
             debugPrint("Total Leave Taken (Calculated): $leaveTakenStr");
             debugPrint("LOP Taken (Calculated): $lopTakenStr");
           });
+
+          // UPDATE TOKEN IF RETURNED
+          final String? newToken = data["token"] ?? data["data"]?["token"];
+          if (newToken != null && newToken.isNotEmpty) {
+            await prefs.setString('token', newToken);
+            debugPrint("Leave Stats: New Session Token Saved => $newToken");
+          }
         }
       }
     } catch (e) {
       debugPrint("Error fetching leave statistics: $e");
     }
-  }
-
-  @override
-  void dispose() {
-    breakTimer?.cancel();
-    purposeController.dispose();
-    super.dispose();
   }
 
   /// Handle Break In API Call
@@ -602,18 +974,21 @@ class AttendanceScreenState extends State<AttendanceScreen> {
         return;
       }
 
-      // Make API call using identified parameters from login/sync flow
       final prefs = await SharedPreferences.getInstance();
+      final String? sessionToken = prefs.getString('token');
+
+      // Make API call using identified parameters from login/sync flow
       final body = {
         "type": "2055",
         "cid": cid,
-        "uid": serverUidString ?? uid.toString(),
+        "uid": uid.toString(), // Standardized UID (Priority: login_cus_id)
+        "id": uid.toString(), // Alias for backward compatibility
         "device_id": deviceId ?? "",
         "lt": currentPosition!.latitude.toString(),
         "ln": currentPosition!.longitude.toString(),
         "reason": breakPurpose,
-        if (prefs.getString('token') != null)
-          "token": prefs.getString('token')!,
+        if (sessionToken != null && sessionToken.isNotEmpty)
+          "token": sessionToken,
       };
 
       debugPrint("BREAK IN POST REQUEST => $body");
@@ -625,34 +1000,67 @@ class AttendanceScreenState extends State<AttendanceScreen> {
 
       debugPrint("BREAK IN RAW RESPONSE => ${response.body}");
       final responseData = jsonDecode(response.body);
-
-      if (responseData["error"] == false || responseData["error"] == "false") {
-        debugPrint("BREAK IN SUCCESS! Data: ${responseData["data"]}");
-      } else {
-        debugPrint("BREAK IN FAILED! Message: ${responseData["error_msg"]}");
-      }
+      final String errorMsg = responseData["error_msg"] ?? "";
+      final bool isAlreadyOnBreak = errorMsg.toLowerCase().contains(
+        "already on a break",
+      );
       final bool isSuccess =
-          responseData["error"] == false || responseData["error"] == "false";
+          responseData["error"] == false ||
+          responseData["error"] == "false" ||
+          isAlreadyOnBreak;
 
       if (isSuccess && responseData["data"] != null) {
         final data = responseData["data"];
 
-        // Note: Break API uses 'employee_name' as per user info
-        if (data["employee_name"] != null) {
-          employeeName = data["employee_name"].toString();
-        }
-        if (data["employee_code"] != null) {
-          employeeCode = data["employee_code"].toString();
+        // UPDATE TOKEN IF RETURNED
+        final String? newToken = responseData["token"] ?? data["token"];
+        if (newToken != null && newToken.isNotEmpty) {
+          await prefs.setString('token', newToken);
+          debugPrint("Break In: New Session Token Saved => $newToken");
         }
 
         currentBreakId =
             int.tryParse((data["break_id"] ?? "").toString()) ?? currentBreakId;
 
+        // Recovery: If already on break, parse the start time from server
+        if (isAlreadyOnBreak && data["break_in_time"] != null) {
+          try {
+            final String timeStr = data["break_in_time"]
+                .toString(); // e.g. "10:08"
+            final parts = timeStr.split(':');
+            if (parts.length >= 2) {
+              final now = DateTime.now();
+              currentBreakInTime = DateTime(
+                now.year,
+                now.month,
+                now.day,
+                int.parse(parts[0]),
+                int.parse(parts[1]),
+              );
+            }
+          } catch (e) {
+            debugPrint("Error parsing break_in_time: $e");
+            currentBreakInTime = DateTime.now();
+          }
+        } else {
+          currentBreakInTime = DateTime.now();
+        }
+
+        // Save to SharedPreferences IMMEDIATELY
+        await prefs.setBool('is_on_break', true);
+        await prefs.setString(
+          'break_start_time',
+          currentBreakInTime!.toIso8601String(),
+        );
+        if (currentBreakId != null) {
+          await prefs.setInt('current_break_id', currentBreakId!);
+        }
+        await prefs.setString('break_purpose', breakPurpose);
+
         setState(() {
           breakSwitch = true;
           isLoading = false;
-          currentBreakInTime = DateTime.now();
-          breakDuration = Duration.zero;
+          breakDuration = DateTime.now().difference(currentBreakInTime!);
         });
         startBreakTimer();
 
@@ -660,15 +1068,25 @@ class AttendanceScreenState extends State<AttendanceScreen> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
-                responseData["error_msg"] ?? 'Break started successfully',
+                isAlreadyOnBreak
+                    ? "Recovered existing break status"
+                    : (responseData["error_msg"] ??
+                          'Break started successfully'),
               ),
-              backgroundColor: Colors.green,
+              backgroundColor: isAlreadyOnBreak ? Colors.orange : Colors.green,
               duration: const Duration(seconds: 2),
             ),
           );
         }
       } else {
         setState(() => isLoading = false);
+        // If session is invalid, inform user but do not force logout
+        if (errorMsg.toLowerCase().contains("session not found") ||
+            errorMsg.toLowerCase().contains("login again")) {
+          // Just show dialog without logout
+          _showSessionErrorDialog();
+        }
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -708,17 +1126,19 @@ class AttendanceScreenState extends State<AttendanceScreen> {
         return;
       }
 
-      // Make API call using identified parameters from login/sync flow
       final prefs = await SharedPreferences.getInstance();
+      final String? sessionToken = prefs.getString('token');
+
       final body = {
         "type": "2056",
         "cid": cid,
-        "uid": serverUidString ?? uid.toString(),
+        "uid": uid.toString(), // Standardized UID (Priority: login_cus_id)
+        "id": uid.toString(), // Alias for backward compatibility
         "device_id": deviceId ?? "",
         "lt": currentPosition!.latitude.toString(),
         "ln": currentPosition!.longitude.toString(),
-        if (prefs.getString('token') != null)
-          "token": prefs.getString('token')!,
+        if (sessionToken != null && sessionToken.isNotEmpty)
+          "token": sessionToken,
       };
 
       debugPrint("BREAK OUT POST REQUEST => $body");
@@ -735,6 +1155,13 @@ class AttendanceScreenState extends State<AttendanceScreen> {
 
       if (isSuccess && responseData["data"] != null) {
         final data = responseData["data"];
+
+        // UPDATE TOKEN IF RETURNED
+        final String? newToken = responseData["token"] ?? data["token"];
+        if (newToken != null && newToken.isNotEmpty) {
+          await prefs.setString('token', newToken);
+          debugPrint("Break Out: New Session Token Saved => $newToken");
+        }
 
         // Update employee name if provided (Break Out also uses employee_name)
         if (data["employee_name"] != null) {
@@ -776,6 +1203,12 @@ class AttendanceScreenState extends State<AttendanceScreen> {
           );
           totalBreakDuration += duration;
         }
+
+        // Clear from SharedPreferences
+        await prefs.remove('is_on_break');
+        await prefs.remove('break_start_time');
+        await prefs.remove('current_break_id');
+        await prefs.remove('break_purpose');
 
         setState(() {
           breakSwitch = false;
@@ -825,9 +1258,11 @@ class AttendanceScreenState extends State<AttendanceScreen> {
   void startBreakTimer() {
     breakTimer?.cancel();
     breakTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      setState(() {
-        breakDuration += const Duration(seconds: 1);
-      });
+      if (mounted && currentBreakInTime != null) {
+        setState(() {
+          breakDuration = DateTime.now().difference(currentBreakInTime!);
+        });
+      }
     });
   }
 
@@ -979,363 +1414,414 @@ class AttendanceScreenState extends State<AttendanceScreen> {
   }
 
   Future<void> _showBreakReportDialog() async {
+    bool initiallyFetchedForDialog = false;
+
     return showDialog(
       context: context,
       builder: (context) {
-        final w = MediaQuery.of(context).size.width;
-        final h = MediaQuery.of(context).size.height;
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final w = MediaQuery.of(context).size.width;
+            final h = MediaQuery.of(context).size.height;
 
-        return Dialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: Container(
-            constraints: BoxConstraints(
-              maxHeight: h * 0.85,
-              maxWidth: w * 0.95,
-            ),
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Header
-                  Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFE6F6F4),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Image.asset(
-                            "assets/cup.png",
-                            width: 32,
-                            height: 32,
-                          ),
-                        ),
-                        const SizedBox(width: 15),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: const [
-                              Text(
-                                "Break Report",
-                                style: TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              SizedBox(height: 4),
-                              Text(
-                                "View all your breaks taken today",
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.black54,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        IconButton(
-                          onPressed: () => Navigator.pop(context),
-                          icon: const Icon(Icons.close),
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(),
-                        ),
-                      ],
-                    ),
-                  ),
+            // Trigger fetch once for the dialog and refresh UI through setDialogState
+            if (!initiallyFetchedForDialog) {
+              initiallyFetchedForDialog = true;
+              Future.microtask(() {
+                _fetchBreakHistory(
+                  onUpdate: () {
+                    if (context.mounted) setDialogState(() {});
+                  },
+                );
+              });
+            }
 
-                  // Summary Cards
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Container(
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFE6F6F4),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                color: const Color(
-                                  0xFF00A79D,
-                                ).withValues(alpha: 0.3),
-                                width: 1,
-                              ),
-                            ),
-                            child: Column(
-                              children: [
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Image.asset(
-                                      "assets/cup.png",
-                                      width: 20,
-                                      height: 20,
-                                      color: const Color(0xFF00A79D),
-                                    ),
-                                    const SizedBox(width: 6),
-                                    const Flexible(
-                                      child: Text(
-                                        "Total Breaks",
-                                        style: TextStyle(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w500,
-                                          color: Colors.black87,
-                                        ),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 12),
-                                FittedBox(
-                                  fit: BoxFit.scaleDown,
-                                  child: Text(
-                                    "${breakHistory.length}",
-                                    style: const TextStyle(
-                                      fontSize: 32,
-                                      fontWeight: FontWeight.bold,
-                                      color: Color(0xFF00A79D),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFFFF3E0),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                color: const Color(
-                                  0xFFFF9800,
-                                ).withValues(alpha: 0.3),
-                                width: 1,
-                              ),
-                            ),
-                            child: Column(
-                              children: [
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: const [
-                                    Icon(
-                                      Icons.access_time,
-                                      size: 20,
-                                      color: Color(0xFFFF9800),
-                                    ),
-                                    SizedBox(width: 6),
-                                    Flexible(
-                                      child: Text(
-                                        "Total Time",
-                                        style: TextStyle(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w500,
-                                          color: Colors.black87,
-                                        ),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 12),
-                                FittedBox(
-                                  fit: BoxFit.scaleDown,
-                                  child: Text(
-                                    _formatDurationHoursMinutes(
-                                      totalBreakDuration,
-                                    ),
-                                    style: const TextStyle(
-                                      fontSize: 32,
-                                      fontWeight: FontWeight.bold,
-                                      color: Color(0xFFFF9800),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  const SizedBox(height: 20),
-
-                  // Break History Section
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 20),
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        "Break History",
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 12),
-
-                  // Break History List
-                  breakHistory.isEmpty
-                      ? Padding(
-                          padding: const EdgeInsets.all(40),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Image.asset(
-                                "assets/cup.png",
-                                width: 60,
-                                height: 60,
-                                color: Colors.grey.shade400,
-                              ),
-                              const SizedBox(height: 16),
-                              const Text(
-                                "No breaks taken yet",
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.black87,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              const Text(
-                                "Your break history will appear here",
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.black54,
-                                ),
-                              ),
-                            ],
-                          ),
-                        )
-                      : ListView.builder(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          padding: const EdgeInsets.symmetric(horizontal: 20),
-                          itemCount: breakHistory.length,
-                          itemBuilder: (context, index) {
-                            final entry = breakHistory[index];
-                            return Container(
-                              margin: const EdgeInsets.only(bottom: 12),
-                              padding: const EdgeInsets.all(16),
+            return Dialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Container(
+                constraints: BoxConstraints(
+                  maxHeight: h * 0.85,
+                  maxWidth: w * 0.95,
+                ),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Header
+                      Padding(
+                        padding: const EdgeInsets.all(20),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(10),
                               decoration: BoxDecoration(
-                                color: Colors.white,
+                                color: const Color(0xFFE6F6F4),
                                 borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: Colors.grey.shade300,
-                                  width: 1,
-                                ),
                               ),
-                              child: Row(
+                              child: Image.asset(
+                                "assets/cup.png",
+                                width: 32,
+                                height: 32,
+                              ),
+                            ),
+                            const SizedBox(width: 15),
+                            Expanded(
+                              child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.all(8),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFFE6F6F4),
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: Image.asset(
-                                      "assets/cup.png",
-                                      width: 20,
-                                      height: 20,
-                                      color: const Color(0xFF00A79D),
+                                children: const [
+                                  Text(
+                                    "Break Report",
+                                    style: TextStyle(
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.bold,
                                     ),
                                   ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          entry.purpose,
-                                          style: const TextStyle(
-                                            fontSize: 15,
-                                            fontWeight: FontWeight.w600,
-                                            color: Colors.black87,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 8),
-                                        Row(
-                                          children: [
-                                            const Icon(
-                                              Icons.login,
-                                              size: 14,
-                                              color: Colors.green,
-                                            ),
-                                            const SizedBox(width: 4),
-                                            Text(
-                                              _formatTime(entry.breakInTime),
-                                              style: const TextStyle(
-                                                fontSize: 13,
-                                                color: Colors.black54,
-                                              ),
-                                            ),
-                                            const SizedBox(width: 16),
-                                            const Icon(
-                                              Icons.logout,
-                                              size: 14,
-                                              color: Colors.red,
-                                            ),
-                                            const SizedBox(width: 4),
-                                            Text(
-                                              entry.breakOutTime != null
-                                                  ? _formatTime(
-                                                      entry.breakOutTime!,
-                                                    )
-                                                  : "--:--",
-                                              style: const TextStyle(
-                                                fontSize: 13,
-                                                color: Colors.black54,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 6,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFFFFF3E0),
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: Text(
-                                      _formatDurationHoursMinutes(
-                                        entry.duration,
-                                      ),
-                                      style: const TextStyle(
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w600,
-                                        color: Color(0xFFFF9800),
-                                      ),
+                                  SizedBox(height: 4),
+                                  Text(
+                                    "View all your breaks taken today",
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.black54,
                                     ),
                                   ),
                                 ],
                               ),
-                            );
-                          },
+                            ),
+                            IconButton(
+                              onPressed: () => Navigator.pop(context),
+                              icon: const Icon(Icons.close),
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                            ),
+                          ],
                         ),
-                  const SizedBox(height: 20),
-                ],
+                      ),
+
+                      // Summary Cards
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFE6F6F4),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: const Color(
+                                      0xFF00A79D,
+                                    ).withValues(alpha: 0.3),
+                                    width: 1,
+                                  ),
+                                ),
+                                child: Column(
+                                  children: [
+                                    Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        Image.asset(
+                                          "assets/cup.png",
+                                          width: 20,
+                                          height: 20,
+                                          color: const Color(0xFF00A79D),
+                                        ),
+                                        const SizedBox(width: 6),
+                                        const Flexible(
+                                          child: Text(
+                                            "Total Breaks",
+                                            style: TextStyle(
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.w500,
+                                              color: Colors.black87,
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 12),
+                                    FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      child: Text(
+                                        "${breakHistory.length}",
+                                        style: const TextStyle(
+                                          fontSize: 32,
+                                          fontWeight: FontWeight.bold,
+                                          color: Color(0xFF00A79D),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFFFF3E0),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: const Color(
+                                      0xFFFF9800,
+                                    ).withValues(alpha: 0.3),
+                                    width: 1,
+                                  ),
+                                ),
+                                child: Column(
+                                  children: [
+                                    Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: const [
+                                        Icon(
+                                          Icons.access_time,
+                                          size: 20,
+                                          color: Color(0xFFFF9800),
+                                        ),
+                                        SizedBox(width: 6),
+                                        Flexible(
+                                          child: Text(
+                                            "Total Time",
+                                            style: TextStyle(
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.w500,
+                                              color: Colors.black87,
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 12),
+                                    FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      child: Text(
+                                        _formatDurationHoursMinutes(
+                                          totalBreakDuration,
+                                        ),
+                                        style: const TextStyle(
+                                          fontSize: 32,
+                                          fontWeight: FontWeight.bold,
+                                          color: Color(0xFFFF9800),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      const SizedBox(height: 20),
+
+                      // Break History Section
+                      const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 20),
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            "Break History",
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 12),
+
+                      // Break History List
+                      isBreakHistoryLoading
+                          ? const Padding(
+                              padding: EdgeInsets.all(40),
+                              child: CircularProgressIndicator(),
+                            )
+                          : breakHistory.isEmpty
+                          ? Padding(
+                              padding: const EdgeInsets.all(40),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Image.asset(
+                                    "assets/cup.png",
+                                    width: 60,
+                                    height: 60,
+                                    color: Colors.grey.shade400,
+                                  ),
+                                  const SizedBox(height: 16),
+                                  const Text(
+                                    "No breaks taken yet",
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.black87,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  const Text(
+                                    "Your break history will appear here",
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      color: Colors.black54,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            )
+                          : ListView.builder(
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 20,
+                              ),
+                              itemCount: breakHistory.length,
+                              itemBuilder: (context, index) {
+                                final entry = breakHistory[index];
+                                return Container(
+                                  margin: const EdgeInsets.only(bottom: 12),
+                                  padding: const EdgeInsets.all(16),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(
+                                      color: Colors.grey.shade300,
+                                      width: 1,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.all(8),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFE6F6F4),
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
+                                        ),
+                                        child: Image.asset(
+                                          "assets/cup.png",
+                                          width: 20,
+                                          height: 20,
+                                          color: const Color(0xFF00A79D),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              entry.purpose,
+                                              style: const TextStyle(
+                                                fontSize: 15,
+                                                fontWeight: FontWeight.w600,
+                                                color: Colors.black87,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 8),
+                                            Wrap(
+                                              spacing: 12,
+                                              runSpacing: 4,
+                                              children: [
+                                                Row(
+                                                  mainAxisSize:
+                                                      MainAxisSize.min,
+                                                  children: [
+                                                    const Icon(
+                                                      Icons.login,
+                                                      size: 14,
+                                                      color: Colors.green,
+                                                    ),
+                                                    const SizedBox(width: 4),
+                                                    Text(
+                                                      _formatTime(
+                                                        entry.breakInTime,
+                                                      ),
+                                                      style: const TextStyle(
+                                                        fontSize: 13,
+                                                        color: Colors.black54,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                                Row(
+                                                  mainAxisSize:
+                                                      MainAxisSize.min,
+                                                  children: [
+                                                    const Icon(
+                                                      Icons.logout,
+                                                      size: 14,
+                                                      color: Colors.red,
+                                                    ),
+                                                    const SizedBox(width: 4),
+                                                    Text(
+                                                      entry.breakOutTime != null
+                                                          ? _formatTime(
+                                                              entry
+                                                                  .breakOutTime!,
+                                                            )
+                                                          : "--:--",
+                                                      style: const TextStyle(
+                                                        fontSize: 13,
+                                                        color: Colors.black54,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ],
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      Flexible(
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                            vertical: 6,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFFFFF3E0),
+                                            borderRadius: BorderRadius.circular(
+                                              8,
+                                            ),
+                                          ),
+                                          child: Text(
+                                            _formatDurationHoursMinutes(
+                                              entry.duration,
+                                            ),
+                                            style: const TextStyle(
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.w600,
+                                              color: Color(0xFFFF9800),
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
+                      const SizedBox(height: 20),
+                    ],
+                  ),
+                ),
               ),
-            ),
-          ),
+            );
+          },
         );
       },
     );
@@ -1487,7 +1973,10 @@ class AttendanceScreenState extends State<AttendanceScreen> {
 
   Widget breakReportCard(double w, double h) {
     return GestureDetector(
-      onTap: () => _showBreakReportDialog(),
+      onTap: () {
+        _fetchBreakHistory();
+        _showBreakReportDialog();
+      },
       child: Container(
         width: double.infinity,
         padding: EdgeInsets.symmetric(
@@ -1614,7 +2103,9 @@ class AttendanceScreenState extends State<AttendanceScreen> {
             decoration: BoxDecoration(
               color: const Color(0xFFE8F5E9),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFF4CAF50).withOpacity(0.3)),
+              border: Border.all(
+                color: const Color(0xFF4CAF50).withValues(alpha: 0.3),
+              ),
             ),
             child: Row(
               children: [
@@ -1668,7 +2159,9 @@ class AttendanceScreenState extends State<AttendanceScreen> {
                 if (breakSwitch) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
-                      content: Text('Please end your break before checking out'),
+                      content: Text(
+                        'Please end your break before checking out',
+                      ),
                       backgroundColor: Colors.red,
                     ),
                   );
@@ -2057,25 +2550,27 @@ class AttendanceScreenState extends State<AttendanceScreen> {
   }
 
   Widget attendanceProgressCard(double w, double h, Color teal) {
-    // Calculate progress for dashboard metrics
-    double progress = 0.0;
-    int daysPresent = 0;
-    int totalWorkingDays = 1;
+    final now = DateTime.now();
 
-    if (attendanceHistory != null && !isHistoryLoading) {
-      // Use stats from API if reliable
-      daysPresent =
-          int.tryParse(
-            attendanceHistory!["total_records"]?.toString() ?? "0",
-          ) ??
-          0;
+    // ----- Weekly Calculation (Mon–today) -----
+    final int weekDaysElapsed = now.weekday.clamp(1, 5); // Mon–Fri
+    final int weeklyPresent = weeklyDaysWorked.clamp(0, weekDaysElapsed);
+    final double weekProgress = weekDaysElapsed > 0
+        ? (weeklyPresent / weekDaysElapsed).clamp(0.0, 1.0)
+        : 0.0;
 
-      DateTime now = DateTime.now();
-      totalWorkingDays = now.day; // Approximation: days passed in month
+    // ----- Monthly Calculation (1st to today) -----
+    final int monthDaysElapsed = now.day;
+    final int monthlyPresent = daysWorked;
+    final double monthProgress = monthDaysElapsed > 0
+        ? (monthlyPresent / monthDaysElapsed).clamp(0.0, 1.0)
+        : 0.0;
 
-      if (totalWorkingDays == 0) totalWorkingDays = 1;
-      progress = (daysPresent / totalWorkingDays).clamp(0.0, 1.0);
-    }
+    // Active tab values
+    final double progress = selectedTab == 0 ? weekProgress : monthProgress;
+    final int daysPresent = selectedTab == 0 ? weeklyPresent : monthlyPresent;
+    final int totalDays = selectedTab == 0 ? weekDaysElapsed : monthDaysElapsed;
+    final String periodLabel = selectedTab == 0 ? "This Week" : "This Month";
 
     return Container(
       padding: EdgeInsets.all(w * 0.04),
@@ -2105,12 +2600,17 @@ class AttendanceScreenState extends State<AttendanceScreen> {
           ),
           SizedBox(height: h * 0.02),
           Row(
-            children: const [
+            children: [
               Icon(Icons.trending_up_outlined),
               SizedBox(width: 8),
               Text(
-                "This Monthly Progress",
-                style: TextStyle(fontWeight: FontWeight.w500, fontSize: 16),
+                selectedTab == 0
+                    ? "This Weekly Progress"
+                    : "This Monthly Progress",
+                style: const TextStyle(
+                  fontWeight: FontWeight.w500,
+                  fontSize: 16,
+                ),
               ),
             ],
           ),
@@ -2149,10 +2649,7 @@ class AttendanceScreenState extends State<AttendanceScreen> {
                     Expanded(
                       child: monthlyStatBox(
                         "Day Worked",
-                        attendanceHistory != null &&
-                                attendanceHistory!["total_records"] != null
-                            ? attendanceHistory!["total_records"].toString()
-                            : "0",
+                        daysWorked.toString(),
                       ),
                     ),
                     SizedBox(width: w * 0.03),
@@ -2208,14 +2705,6 @@ class AttendanceScreenState extends State<AttendanceScreen> {
             ],
           ),
           SizedBox(height: h * 0.01),
-          // Using LinearProgressIndicator instead of Image if preferable, but user has Image asset
-          // Assuming user might want accurate visual representation, let's keep image or replace?
-          // The user said "oluga data show aagala" (data not showing properly).
-          // Maybe they mean the TEXT? "4/6 days" and "80%" were hardcoded.
-          // Let's replace the text values correctly.
-          // And maybe use a real progress bar if the image is static.
-          // I'll add a LinearProgressIndicator below or replace the image if permitted.
-          // Given the prompt "fix pannu" (fix it), replacing static image with dynamic indicator is better.
           LinearProgressIndicator(
             value: progress,
             backgroundColor: Colors.grey[300],
@@ -2228,7 +2717,7 @@ class AttendanceScreenState extends State<AttendanceScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                "This Month",
+                periodLabel,
                 style: const TextStyle(
                   fontSize: 12,
                   color: Colors.black,
@@ -2236,7 +2725,7 @@ class AttendanceScreenState extends State<AttendanceScreen> {
                 ),
               ),
               Text(
-                "$daysPresent/$totalWorkingDays days",
+                "$daysPresent/$totalDays days",
                 style: const TextStyle(
                   fontSize: 12,
                   color: Colors.black,

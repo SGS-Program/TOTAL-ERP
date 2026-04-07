@@ -12,6 +12,7 @@ import 'feedback.dart';
 import 'notification_alert.dart';
 
 import '../../models/employee_api.dart';
+import 'package:hrm_admin_app/hrm_admin_app.dart' as admin;
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -49,29 +50,45 @@ class _SettingsScreenState extends State<SettingsScreen> {
         });
       }
 
-      final int uid = prefs.getInt('uid') ?? 0;
-      final String lat = prefs.getDouble('lat')?.toString() ?? "145";
-      final String lng = prefs.getDouble('lng')?.toString() ?? "145";
+      // ✅ CRITICAL: Using the original login_cus_id ensures the token matches
+      final String? sessionUid = prefs.getString('login_cus_id');
+
+      // Fallback only to the MOST verified ID possible
+      final String uidToUse =
+          sessionUid ?? prefs.getString('employee_table_id') ?? "";
+
+      final String lat = prefs.getDouble('lat')?.toString() ?? "";
+      final String lng = prefs.getDouble('lng')?.toString() ?? "";
 
       // Get Device ID
       String deviceId = prefs.getString('device_id') ?? "";
-      
+
       final response = await EmployeeApi.getEmployeeDetails(
-        uid: uid == 0 ? "9" : uid.toString(), // Using 9 as fallback if uid is 0
+        uid: uidToUse,
         cid: prefs.getString('cid') ?? "",
         deviceId: deviceId,
-        lat: lat == "0.0" ? "145" : lat,
-        lng: lng == "0.0" ? "145" : lng,
-        token: prefs.getString('token'),
+        lat: lat,
+        lng: lng,
+        token: prefs.getString('token') ?? "",
       );
 
       if (response["error"] == false || response["error"] == "false") {
         if (!mounted) return;
         setState(() {
-          userName = response["name"] ?? "User";
-          userCode = response["employee_code"] ?? "";
-          userMobile = response["contact_number"] ?? "";
-          profilePhoto = response["profile_photo"] ?? "";
+          userName = response["name"] ?? prefs.getString('name') ?? "User";
+          userCode =
+              response["employee_code"] ??
+              prefs.getString('employee_code') ??
+              "";
+          userMobile =
+              response["contact_number"] ??
+              response["mobile"] ??
+              prefs.getString('mobile') ??
+              "";
+          profilePhoto =
+              response["profile_photo"] ??
+              prefs.getString('profile_photo') ??
+              "";
           isLoading = false;
         });
 
@@ -85,12 +102,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
         await prefs.setString('dob', response["dob"] ?? "");
         await prefs.setString('address', response["address"] ?? "");
         await prefs.setString('profile_photo', profilePhoto);
-        
-        // SAVE ASSIGN_TO FOR MARKETING SCREEN SPEED
+
+        // ✅ IMPORTANT: Save the UID from Employee Details as the authoritative internal ID
         if (response["uid"] != null) {
-          await prefs.setString('assign_to', response["uid"].toString());
-          debugPrint("ASSIGN_TO SAVED IN CACHE: ${response["uid"]}");
+          final returnedUid = response["uid"].toString();
+          await prefs.setString('employee_table_id', returnedUid);
+          await prefs.setString(
+            'assign_to',
+            returnedUid,
+          ); // Essential for Marketing
+          await prefs.setInt('uid', int.tryParse(returnedUid) ?? 0);
+          debugPrint(
+            "SYNC => Local UID updated from Profile API: $returnedUid",
+          );
         }
+      } else if (response["error_msg"]?.toString().toLowerCase().contains(
+                "session not found",
+              ) ==
+              true ||
+          response["error_msg"]?.toString().toLowerCase().contains(
+                "invalid token",
+              ) ==
+              true) {
+        // ✅ AUTO-RECOVER: Clear bad IDs and Token by going back to login
+        if (!mounted) return;
+        _handleInvalidToken();
       } else {
         if (!mounted) return;
         setState(() {
@@ -104,6 +140,46 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (mounted) {
         setState(() => isLoading = false);
       }
+    }
+  }
+
+  Future<void> _handleInvalidToken() async {
+    final prefs = await SharedPreferences.getInstance();
+
+    final List<String> persistenceKeys = [
+      'lat',
+      'lng',
+      'device_id',
+      'app_signature',
+      'isCheckedIn',
+      'last_checkin_date',
+      'last_checkout_date',
+      'is_on_break',
+      'break_start_time',
+      'current_break_id',
+      'break_purpose',
+      'marketing_attendance_mode',
+      'has_done_marketing_today',
+      'marketing_check_in_time',
+      'checkin_face_profile',
+    ];
+
+    final allKeys = prefs.getKeys();
+    for (String key in allKeys) {
+      if (!persistenceKeys.contains(key)) {
+        await prefs.remove(key);
+      }
+    }
+
+    if (mounted) {
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
+        (route) => false,
+      );
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Session expired. Please login again.")),
+      );
     }
   }
 
@@ -301,6 +377,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         const Divider(height: 1, indent: 20, endIndent: 20),
         _buildSettingOption(
+          "Admin",
+          "assets/security.png",
+          onTap: () {
+            if (mounted && context.mounted) {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => admin.AdminDashboard(
+                    onBackToHrm: () {
+                      Navigator.pop(context); // Go back from Admin module to HRM
+                    },
+                  ),
+                ),
+              );
+            }
+          },
+        ),
+        const Divider(height: 1, indent: 20, endIndent: 20),
+        _buildSettingOption(
           "Logout",
           "assets/logout.png",
           isLogout: true,
@@ -427,29 +522,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         child: ElevatedButton(
                           onPressed: () async {
                             final prefs = await SharedPreferences.getInstance();
-                            // Preserve location and device data
-                            final double? lat = prefs.getDouble('lat');
-                            final double? lng = prefs.getDouble('lng');
-                            final String? deviceId = prefs.getString(
+
+                            // 1. Prepare List of keys to keep (persistence keys)
+                            final List<String> persistenceKeys = [
+                              'lat',
+                              'lng',
                               'device_id',
-                            );
-                            final String? appSignature = prefs.getString(
                               'app_signature',
-                            );
+                              'isCheckedIn',
+                              'last_checkin_date',
+                              'last_checkout_date',
+                              'is_on_break',
+                              'break_start_time',
+                              'current_break_id',
+                              'break_purpose',
+                              'marketing_attendance_mode',
+                              'has_done_marketing_today',
+                              'marketing_check_in_time',
+                              'checkin_face_profile',
+                            ];
 
-                            await prefs.clear(); // Clear all data on logout
-
-                            // Restore location and device data
-                            if (lat != null) await prefs.setDouble('lat', lat);
-                            if (lng != null) await prefs.setDouble('lng', lng);
-                            if (deviceId != null) {
-                              await prefs.setString('device_id', deviceId);
-                            }
-                            if (appSignature != null) {
-                              await prefs.setString(
-                                'app_signature',
-                                appSignature,
-                              );
+                            // 2. Identify keys to remove (session keys)
+                            final allKeys = prefs.getKeys();
+                            for (String key in allKeys) {
+                              if (!persistenceKeys.contains(key)) {
+                                await prefs.remove(key);
+                              }
                             }
 
                             if (mounted) {

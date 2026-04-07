@@ -101,7 +101,7 @@ class MainDrawer extends StatelessWidget {
                   'admin@sgs-erp.com',
                   style: GoogleFonts.outfit(
                     fontSize: 12,
-                    color: Colors.white.withOpacity(0.8),
+                    color: Colors.white.withValues(alpha: 0.8),
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -134,7 +134,7 @@ class MainDrawer extends StatelessWidget {
           fontSize: 15,
         ),
       ),
-      tileColor: isActive ? tealColor.withOpacity(0.05) : null,
+      tileColor: isActive ? tealColor.withValues(alpha: 0.05) : null,
       contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
       onTap: onTap,
     );

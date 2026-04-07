@@ -1,9 +1,10 @@
-﻿import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart';
 import 'dart:convert';
-import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
+import '../services/api_client.dart';
 
 class EmployeeApi {
-  static const String baseUrl = "https://erpsmart.in/total/api/m_api/";
+  static final ApiClient _apiClient = ApiClient();
 
   static Future<Map<String, dynamic>> getEmployeeDetails({
     required String uid,
@@ -25,14 +26,20 @@ class EmployeeApi {
         if (token != null && token.isNotEmpty) "token": token,
       };
 
-      debugPrint("Employee Details Request Body: $body");
+      final response = await _apiClient.post(body);
+      debugPrint("Employee Details API Response (2048) => ${response.body}");
+      final data = jsonDecode(response.body);
 
-      final response = await http.post(Uri.parse(baseUrl), body: body);
-
-      debugPrint("Employee Details Response: ${response.body}");
+      // ✅ TOKEN ROTATION: Update stored token if server provides a new one
+      final newToken = data["token"]?.toString();
+      if (newToken != null && newToken.isNotEmpty) {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString("token", newToken);
+        debugPrint("Employee Detail API Token Update => $newToken");
+      }
 
       if (response.statusCode == 200) {
-        return jsonDecode(response.body);
+        return data;
       } else {
         return {
           "error": true,

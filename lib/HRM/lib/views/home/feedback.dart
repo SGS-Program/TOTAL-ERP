@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:hrm/views/home/ticket_raise.dart';
 
@@ -99,7 +99,7 @@ class FeedbackSupportScreen extends StatelessWidget {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        "HR Helpdesk: +91 98765â€“43210\nAvailable 9 AM â€“ 6 PM (Monâ€“Sat)",
+                        "HR Helpdesk: +91 98765–43210\nAvailable 9 AM – 6 PM (Mon–Sat)",
                         style: GoogleFonts.poppins(
                           fontSize: 14,
                           fontWeight: FontWeight.w400,

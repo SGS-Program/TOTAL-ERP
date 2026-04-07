@@ -288,7 +288,8 @@ class _SmsLoginState extends State<SmsLogin> {
 
       final response = await LoginApi.sendOtp(
         mobile: _emailController.text.trim(),
-        type: "2000",
+        type: "2088", // Admin Send OTP
+        cid: "21472147", // Admin CID
         deviceId: deviceId,
         lat: lat,
         lng: lng,
@@ -304,31 +305,41 @@ class _SmsLoginState extends State<SmsLogin> {
           response["status"] == 1;
 
       if (isSuccess) {
-        _snack(
-          response["error_msg"] ??
-              response["message"] ??
-              "OTP sent successfully",
-          true,
-        );
-
         final String cusId = response["cus_id"]?.toString() ?? "";
+        
+        // ✅ PERSIST ORIGINAL CUS_ID FOR SESSION
+        if (cusId.isNotEmpty) {
+          await prefs.setString("login_cus_id", cusId);
+          debugPrint("PREF login_cus_id saved (SMS) => $cusId");
+        }
 
         if (response.containsKey("cid") && response["cid"] != null) {
           final String cid = response["cid"].toString();
           await prefs.setString("cid", cid);
         }
 
-        showModalBottomSheet(
-          context: context,
-          isScrollControlled: true,
-          backgroundColor: Colors.transparent,
-          builder: (_) {
-            return OtpBottomSheet(
-              phoneNumber: _emailController.text.trim(),
-              cusId: cusId,
-            );
-          },
-        );
+        if (mounted) {
+          _snack(
+            response["error_msg"] ??
+                response["message"] ??
+                "OTP sent successfully",
+            true,
+          );
+          
+          showModalBottomSheet(
+            context: context,
+            isScrollControlled: true,
+            backgroundColor: Colors.transparent,
+            builder: (_) {
+              return OtpBottomSheet(
+                phoneNumber: _emailController.text.trim(),
+                cusId: cusId,
+                type: "2089", // Admin Verify Type
+                resendType: "2088", // Admin Resend Type
+              );
+            },
+          );
+        }
       } else {
         _snack(
           response["error_msg"] ?? response["message"] ?? "OTP failed",
@@ -337,7 +348,7 @@ class _SmsLoginState extends State<SmsLogin> {
       }
     } catch (e) {
       debugPrint("OTP ERROR => $e");
-      _snack("Server error", false);
+      _snack("Error: $e", false);
     }
 
     setState(() => isLoading = false);

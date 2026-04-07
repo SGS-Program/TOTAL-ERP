@@ -443,6 +443,8 @@ class _AddExpenseState extends State<AddExpense> {
     try {
       final prefs = await SharedPreferences.getInstance();
       final uid =
+          prefs.getString('login_cus_id') ??
+          prefs.getString('server_uid') ??
           prefs.getString('employee_table_id') ??
           prefs.getInt('uid')?.toString() ??
           "";
@@ -470,19 +472,32 @@ class _AddExpenseState extends State<AddExpense> {
         amount: amount,
         description:
             description, // Consider merging purpose if needed: "$purpose - $description"
+        lat: position.latitude.toString(),
+        lng: position.longitude.toString(),
         purpose: purpose,
         expenseDate: date,
         deviceId: deviceId!,
-        lat: position.latitude.toString(),
-        lng: position.longitude.toString(),
         receiptImage: _receiptImage,
+        token: prefs.getString('token'),
       );
 
       debugPrint("Add Expense Response in UI: $response");
 
       if (!mounted) return;
 
-      if (response["error"] == false) {
+      if (response["error"] == false ||
+          response["status"] == "success" ||
+          response["error_msg"] == "Expense claim submitted successfully") {
+        // ✅ RE-BIND Domain UID from Response (for list viewing/stats)
+        if (response["uid"] != null) {
+          final returnedUid = response["uid"].toString();
+          await prefs.setString("employee_table_id", returnedUid);
+          await prefs.setInt("uid", int.tryParse(returnedUid) ?? 0);
+          debugPrint("SYNC => Expense domain UID updated: $returnedUid");
+        }
+
+        if (!mounted) return;
+
         showDialog(
           context: context,
           barrierDismissible: false,
@@ -490,7 +505,7 @@ class _AddExpenseState extends State<AddExpense> {
               SuccessExpenseDialog(amount: amount, purpose: purpose),
         );
 
-        Future.delayed(const Duration(milliseconds: 1000), () {
+        Future.delayed(const Duration(milliseconds: 3000), () {
           if (mounted) {
             Navigator.pop(context); // Close dialog
             Navigator.pop(context, true); // Go back and signal refresh

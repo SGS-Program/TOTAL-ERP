@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -42,8 +42,8 @@ class _ChatProjectsScreenState extends State<ChatProjectsScreen> {
           uid: uidInt.toString(),
           cid: prefs.getString('cid') ?? "",
           deviceId: prefs.getString('device_id') ?? "",
-          lat: "145",
-          lng: "145",
+          lat: prefs.getDouble('lat')?.toString() ?? "",
+          lng: prefs.getDouble('lng')?.toString() ?? "",
           token: prefs.getString('token'),
         );
         if (res["error"] == false) {
