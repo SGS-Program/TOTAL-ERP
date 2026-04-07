@@ -31,7 +31,7 @@ class SalesApp extends StatelessWidget {
       theme: AppTheme.light,
       // DashboardPage is the home — it carries its own
       // Scaffold (with Drawer + BottomNavBar) inside.
-      home: const DashboardPage(),
+      home: DashboardPage(),
     );
   }
 }

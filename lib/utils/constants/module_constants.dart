@@ -7,6 +7,11 @@ import 'package:hrm_admin_app/Screens/Admin/admin_dashboard.dart' as hrm_admin;
 import 'package:sale_management/Sales_Module/sale_dashboard.dart' as sale_mgmt;
 import 'package:ecommerce/ecommerce.dart' as ecommerce;
 import 'package:accounting_erp/accounting_root.dart' as accounting;
+import 'package:hrm/views/main_root.dart' as hrm;
+import 'package:warehouse/warehouse.dart' as warehouse;
+
+/// Globally accessible key to control modular scaffolds (e.g., opening drawers from host app bar)
+final GlobalKey<ScaffoldState> moduleScaffoldKey = GlobalKey<ScaffoldState>();
 
 final List<ModuleItem> allModules = [
   ModuleItem(
@@ -15,6 +20,13 @@ final List<ModuleItem> allModules = [
     bgColor: Color(0xFFE3F2FD),
     fallbackIcon: Icons.people_alt,
     screenBuilder: (context) => const hrm_admin.AdminDashboard(isEmbedded: true),
+  ),
+  ModuleItem(
+    title: 'HRM',
+    imagePath: 'assets/images/hrm.png',
+    bgColor: Color(0xFFE3F2FD),
+    fallbackIcon: Icons.people_alt,
+    screenBuilder: (context) => const hrm.MainRoot(isEmbedded: true),
   ),
   ModuleItem(
     title: 'CRM Admin',
@@ -41,7 +53,7 @@ final List<ModuleItem> allModules = [
     imagePath: 'assets/images/sales.png',
     bgColor: Color(0xFFFFEBEE),
     fallbackIcon: Icons.local_offer,
-    screenBuilder: (context) => const sale_mgmt.DashboardPage(isEmbedded: true),
+    screenBuilder: (context) => sale_mgmt.DashboardPage(isEmbedded: true, scaffoldKey: moduleScaffoldKey),
   ),
   ModuleItem(
     title: 'Ecommerce',
@@ -55,6 +67,7 @@ final List<ModuleItem> allModules = [
     imagePath: 'assets/images/warehouse.png',
     bgColor: Color(0xFFE0F7FA),
     fallbackIcon: Icons.warehouse,
+    screenBuilder: (context) => const warehouse.WarehouseDashboard(isEmbedded: true),
   ),
   ModuleItem(
     title: 'Manufacturing',

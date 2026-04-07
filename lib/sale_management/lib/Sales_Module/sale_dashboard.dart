@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../widgets/app_theme.dart';
-import '../widgets/drawer_screen.dart';
+import '../widgets/app_drawer.dart';
 import 'notification_screen.dart';
-
+import '../sales_invoice_module/payment_screen.dart' as sales_inv;
+import '../Direct_invoice_module/payment_screen.dart' as direct_inv;
+import '../Proforma_Invoice_Module/payment_screen.dart' as proforma_inv;
 
 class DashboardPage extends StatefulWidget {
   final bool isEmbedded;
-  const DashboardPage({super.key, this.isEmbedded = false});
+  final GlobalKey<ScaffoldState>? scaffoldKey;
+  DashboardPage({super.key, this.isEmbedded = false, this.scaffoldKey});
 
   @override
   State<DashboardPage> createState() => _DashboardPageState();
@@ -15,7 +18,7 @@ class DashboardPage extends StatefulWidget {
 
 class _DashboardPageState extends State<DashboardPage> {
   int _selectedIndex = 0;
- 
+
   static const _navItems = [
     _BottomNavItem(
       icon: Icons.dashboard_outlined,
@@ -39,20 +42,27 @@ class _DashboardPageState extends State<DashboardPage> {
     ),
   ];
 
-  List<Widget> get _tabPages => [
-    _DashboardBody(isEmbedded: widget.isEmbedded),
-    const _PlaceholderTab(title: 'Sales Orders', icon: Icons.receipt_long_rounded),
-    const _PlaceholderTab(title: 'Products', icon: Icons.inventory_2_rounded),
-    const _PlaceholderTab(title: 'Reports', icon: Icons.bar_chart_rounded),
-  ];
+  late final List<Widget> _tabPages;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabPages = [
+      _DashboardBody(isEmbedded: widget.isEmbedded),
+      const _PlaceholderTab(title: 'Sales Orders', icon: Icons.receipt_long_rounded),
+      const _PlaceholderTab(title: 'Products', icon: Icons.inventory_2_rounded),
+      const _PlaceholderTab(title: 'Reports', icon: Icons.bar_chart_rounded),
+    ];
+  }
 
   @override
   Widget build(BuildContext context) {
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: AppTheme.statusBarTeal,
       child: Scaffold(
+        key: widget.scaffoldKey,
         backgroundColor: Colors.white,
-        drawer: widget.isEmbedded ? null : const SaleManagementDrawer(),
+        drawer: const AppDrawer(),
         body: IndexedStack(
           index: _selectedIndex,
           children: _tabPages,
@@ -174,15 +184,15 @@ class _BottomNavItem {
 // ═══════════════════════════════════════════════════════════════════════════════
 class _DashboardBody extends StatelessWidget {
   final bool isEmbedded;
-  const _DashboardBody({this.isEmbedded = false});
+  const _DashboardBody({required this.isEmbedded});
 
   @override
   Widget build(BuildContext context) {
     return CustomScrollView(
       physics: const BouncingScrollPhysics(),
       slivers: [
-        _buildAppBar(context),
-        _buildQuickActions(),
+        if (!isEmbedded) _buildAppBar(context),
+        _buildQuickActions(context),
         _buildSectionLabel('Key Metrics'),
         _buildStatsGrid(),
         _buildSectionLabel('Monthly Revenue Trend'),
@@ -196,77 +206,52 @@ class _DashboardBody extends StatelessWidget {
     );
   }
 
-  Widget _buildAppBar(BuildContext context) {
-    if (isEmbedded) {
-      return const SliverToBoxAdapter(child: SizedBox.shrink());
-    }
+  SliverAppBar _buildAppBar(BuildContext context) {
     return SliverAppBar(
-      expandedHeight: 150,
-      floating: false,
       pinned: true,
-      backgroundColor: AppColors.primary,
-      surfaceTintColor: Colors.transparent,
+      floating: true,
+      backgroundColor: Colors.white,
       elevation: 0,
-      leading: Builder(
-        builder: (ctx) => IconButton(
-          onPressed: () => Scaffold.of(ctx).openDrawer(),
-          icon: const Icon(Icons.menu_rounded, color: Colors.white, size: 24),
-        ),
+      surfaceTintColor: Colors.transparent,
+      leading: IconButton(
+        onPressed: () => Navigator.maybePop(context),
+        icon: const Icon(Icons.arrow_back_ios_new, color: Color(0xFF1A2332), size: 18),
+      ),
+      titleSpacing: 0,
+      title: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: const [
+          Text(
+            'Sales',
+            style: TextStyle(
+              color: Color(0xFF1A1C1E),
+              fontSize: 20,
+              fontWeight: FontWeight.w700,
+              fontFamily: 'Poppins',
+            ),
+          ),
+          Text(
+            'Workplace Dashboard',
+            style: TextStyle(
+              color: Color(0xFF78909C),
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              fontFamily: 'Poppins',
+            ),
+          ),
+        ],
       ),
       actions: [
         _NotificationBell(),
-        const SizedBox(width: 4),
+        const SizedBox(width: 8),
         _UserAvatar(),
-        const SizedBox(width: 12),
+        const SizedBox(width: 16),
       ],
-      flexibleSpace: FlexibleSpaceBar(
-        collapseMode: CollapseMode.pin,
-        background: Container(
-          decoration: BoxDecoration(gradient: AppDecorations.headerGradient),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 95, 20, 20),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Expanded(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Sales Dashboard',
-                        style: TextStyle(
-                          color: Colors.white.withOpacity(0.70),
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                          letterSpacing: 0.8,
-                          fontFamily: 'Poppins',
-                        ),
-                      ),
-                      const SizedBox(height: 3),
-                      const Text(
-                        'Overview & Analytics',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 20,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: -0.3,
-                          fontFamily: 'Poppins',
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                _DateChip(),
-              ],
-            ),
-          ),
-        ),
-      ),
     );
   }
 
-  SliverToBoxAdapter _buildQuickActions() {
+  SliverToBoxAdapter _buildQuickActions(BuildContext context) {
     return SliverToBoxAdapter(
       child: Container(
         color: Colors.white,
@@ -285,6 +270,17 @@ class _DashboardBody extends StatelessWidget {
               label: 'New\nQuotation',
               color: AppColors.purple,
               bgColor: const Color(0xFFF3E5F5),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const proforma_inv.InvoiceScreen(
+                      totalAmount: 0.0,
+                      selectedProducts: [],
+                    ),
+                  ),
+                );
+              },
             ),
             const SizedBox(width: 10),
             _QuickActionButton(
@@ -292,6 +288,35 @@ class _DashboardBody extends StatelessWidget {
               label: 'Direct\nInvoice',
               color: AppColors.amber,
               bgColor: const Color(0xFFFFF8E1),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const direct_inv.InvoiceScreen(
+                      totalAmount: 0.0,
+                      selectedProducts: [],
+                    ),
+                  ),
+                );
+              },
+            ),
+            const SizedBox(width: 10),
+            _QuickActionButton(
+              icon: Icons.receipt_long_rounded,
+              label: 'Sales\nInvoice',
+              color: AppColors.primary,
+              bgColor: const Color(0xFFE0F7F4),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const sales_inv.InvoiceScreen(
+                      totalAmount: 0.0,
+                      selectedProducts: [],
+                    ),
+                  ),
+                );
+              },
             ),
           ],
         ),
@@ -610,6 +635,7 @@ class _NotificationBell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Stack(
+      alignment: Alignment.center,
       children: [
         IconButton(
           onPressed: () {
@@ -621,18 +647,18 @@ class _NotificationBell extends StatelessWidget {
             );
           },
           icon: const Icon(Icons.notifications_rounded,
-              color: Colors.white, size: 22),
+              color: Color(0xFF1A1C1E), size: 24),
         ),
         Positioned(
-          right: 10,
-          top: 10,
+          right: 12,
+          top: 14,
           child: Container(
             width: 8,
             height: 8,
             decoration: BoxDecoration(
-              color: AppColors.amber,
+              color: Color(0xFF26A69A),
               shape: BoxShape.circle,
-              border: Border.all(color: AppColors.primaryDark, width: 1.5),
+              border: Border.all(color: Colors.white, width: 1.5),
             ),
           ),
         ),
@@ -644,24 +670,21 @@ class _NotificationBell extends StatelessWidget {
 class _UserAvatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () => Scaffold.of(context).openDrawer(),
-      child: Container(
-        width: 34,
-        height: 34,
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.18),
-          shape: BoxShape.circle,
-          border: Border.all(color: Colors.white.withOpacity(0.4), width: 1.5),
-        ),
-        child: const Center(
-          child: Text(
-            'SA',
-            style: TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w700,
-              fontSize: 12,
-              fontFamily: 'Poppins',
+    return Builder(
+      builder: (ctx) => GestureDetector(
+        onTap: () => Scaffold.of(ctx).openDrawer(),
+        child: Container(
+          width: 38,
+          height: 38,
+          decoration: const BoxDecoration(
+            color: Color(0xFFE0F2F1),
+            shape: BoxShape.circle,
+          ),
+          child: const Center(
+            child: Icon(
+              Icons.person_rounded,
+              color: Color(0xFF26A69A),
+              size: 20,
             ),
           ),
         ),
@@ -706,66 +729,71 @@ class _QuickActionButton extends StatelessWidget {
   final String label;
   final Color color;
   final Color bgColor;
+  final VoidCallback? onTap;
 
   const _QuickActionButton({
     required this.icon,
     required this.label,
     required this.color,
     required this.bgColor,
+    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
     return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
-        decoration: BoxDecoration(
-          color: bgColor,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: color.withOpacity(0.20), width: 1),
-          boxShadow: [
-            BoxShadow(
-              color: color.withOpacity(0.08),
-              blurRadius: 8,
-              offset: const Offset(0, 3),
-            ),
-          ],
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 34,
-              height: 34,
-              decoration: BoxDecoration(
-                color: color,
-                borderRadius: BorderRadius.circular(10),
-                boxShadow: [
-                  BoxShadow(
-                    color: color.withOpacity(0.35),
-                    blurRadius: 8,
-                    offset: const Offset(0, 3),
-                  ),
-                ],
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
+          decoration: BoxDecoration(
+            color: bgColor,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: color.withOpacity(0.20), width: 1),
+            boxShadow: [
+              BoxShadow(
+                color: color.withOpacity(0.08),
+                blurRadius: 8,
+                offset: const Offset(0, 3),
               ),
-              child: Icon(icon, color: Colors.white, size: 17),
-            ),
-            const SizedBox(width: 7),
-            Flexible(
-              child: Text(
-                label,
-                style: TextStyle(
+            ],
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
                   color: color,
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600,
-                  height: 1.3,
-                  fontFamily: 'Poppins',
+                  borderRadius: BorderRadius.circular(10),
+                  boxShadow: [
+                    BoxShadow(
+                      color: color.withOpacity(0.35),
+                      blurRadius: 8,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
                 ),
-                overflow: TextOverflow.ellipsis,
-                maxLines: 2,
+                child: Icon(icon, color: Colors.white, size: 17),
               ),
-            ),
-          ],
+              const SizedBox(width: 7),
+              Flexible(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    height: 1.3,
+                    fontFamily: 'Poppins',
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 2,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../constants/module_constants.dart';
 
 class UniversalAppBar extends StatelessWidget implements PreferredSizeWidget {
   final String title;
@@ -99,9 +100,14 @@ class UniversalAppBar extends StatelessWidget implements PreferredSizeWidget {
               ),
               GestureDetector(
                 onTap: () {
-                  final scaffoldState = Scaffold.maybeOf(context);
-                  if (scaffoldState?.hasDrawer ?? false) {
-                    scaffoldState?.openDrawer();
+                  // Try to open modular drawer first if active, else open host drawer
+                  if (moduleScaffoldKey.currentState?.hasDrawer ?? false) {
+                    moduleScaffoldKey.currentState?.openDrawer();
+                  } else {
+                    final scaffoldState = Scaffold.maybeOf(context);
+                    if (scaffoldState?.hasDrawer ?? false) {
+                      scaffoldState?.openDrawer();
+                    }
                   }
                 },
                 child: CircleAvatar(

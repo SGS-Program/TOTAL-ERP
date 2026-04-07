@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:crm_admin_app/Widgets/custom_bottom_bar.dart';
 import 'package:crm_admin_app/Widgets/custom_drawer.dart';
 import 'package:crm_admin_app/Screens/menumanagement/menumanagement.dart';
@@ -20,9 +21,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Scaffold(
       key: _scaffoldKey,
       backgroundColor: const Color(0xFFF7F9FC),
-      drawer: const CrmAdminDrawer(),
+      drawer: widget.isEmbedded ? null : const CrmAdminDrawer(),
       appBar: widget.isEmbedded ? null : AppBar(
-        toolbarHeight: 70,
+        toolbarHeight: 70.h,
         backgroundColor: Colors.white,
         elevation: 0,
         leading: IconButton(
@@ -56,16 +57,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
             icon: Icon(Icons.search, color: Colors.grey.shade700),
           ),
           _buildNotificationIcon(),
-          const SizedBox(width: 8),
+          SizedBox(width: 8.w),
           GestureDetector(
             onTap: () => _scaffoldKey.currentState?.openDrawer(),
-            child: const CircleAvatar(
-              backgroundColor: Color(0xFF26A69A),
-              radius: 18,
-              child: Icon(Icons.person, color: Colors.white, size: 20),
+            child: CircleAvatar(
+              backgroundColor: const Color(0xFF26A69A),
+              radius: 18.r,
+              child: Icon(Icons.person, color: Colors.white, size: 20.sp),
             ),
           ),
-          const SizedBox(width: 16),
+          SizedBox(width: 16.w),
         ],
       ),
       body: _buildBody(),
@@ -141,7 +142,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           const SizedBox(height: 24),
           _buildSectionHeader('Team Performance', 'View Details'),
           _buildTeamPerformanceList(),
-          const SizedBox(height: 24),
+          SizedBox(height: 24.h),
         ],
       ),
     );
@@ -159,10 +160,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
         children: [
           Text(
             title,
-            style: const TextStyle(
-              fontSize: 18,
+            style: TextStyle(
+              fontSize: 18.sp,
               fontWeight: FontWeight.w800,
-              color: Color(0xFF1A1A1A),
+              color: const Color(0xFF1A1A1A),
             ),
           ),
           Text(
@@ -180,7 +181,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _buildHorizontalStats() {
     return SizedBox(
-      height: 145,
+      height: 155.h,
       child: ListView(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -228,7 +229,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   ) {
     final bool isPositive = trend.startsWith('+');
     return Container(
-      width: 150,
+      width: 160.w,
       margin: const EdgeInsets.only(right: 16),
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
@@ -269,9 +270,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
                 child: Text(
                   trend,
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: Colors.white,
-                    fontSize: 10,
+                    fontSize: 10.sp,
                     fontWeight: FontWeight.w900,
                   ),
                 ),
@@ -283,8 +284,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
             children: [
               Text(
                 value,
-                style: const TextStyle(
-                  fontSize: 22,
+                style: TextStyle(
+                  fontSize: 22.sp,
                   fontWeight: FontWeight.w900,
                   color: Colors.white,
                   letterSpacing: -0.5,

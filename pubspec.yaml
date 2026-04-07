@@ -65,6 +65,8 @@ dependencies:
   google_fonts: ^8.0.2
   ecommerce:
     path: lib/ECOMMERCE
+  warehouse:
+    path: lib/WAREHOUSE
   accounting_erp:
     path: lib/ACCOUNTING
 

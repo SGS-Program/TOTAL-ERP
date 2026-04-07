@@ -150,7 +150,10 @@ class _GenerateInfoScreenState extends State<GenerateInfoScreen> {
       ),
       child: Row(
         children: [
-          Icon(Icons.arrow_back, color: Colors.white, size: iconSize),
+          IconButton(
+            icon: Icon(Icons.arrow_back, color: Colors.white, size: iconSize),
+            onPressed: () => Navigator.pop(context),
+          ),
           SizedBox(width: screenWidth * 0.03),
           Text(
             'Invoice',

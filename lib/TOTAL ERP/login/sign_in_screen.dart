@@ -1,19 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'verify_with_otp.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'dart:io';
-import 'package:battery_plus/battery_plus.dart';
-import '../../utils/localization.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-
-enum LoginType { sms, whatsapp, email }
+import '../home/home.dart';
+import 'verify_with_otp.dart';
+import 'login_types.dart';
 
 class SignInScreen extends StatefulWidget {
   const SignInScreen({super.key});
@@ -23,576 +21,608 @@ class SignInScreen extends StatefulWidget {
 }
 
 class _SignInScreenState extends State<SignInScreen> {
-  LoginType _currentType = LoginType.email;
-  final TextEditingController _controller = TextEditingController();
-  String? _errorText; // Holds validation error messages
-  bool _isLoading = false; // Add loading state
+  final TextEditingController _usernameController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+  final TextEditingController _mobileController = TextEditingController();
+  final TextEditingController _urlController = TextEditingController();
+  
+  List<String> _recentUrls = [];
+  String _serverUrl = 'https://erpsmart.in/total/api/m_api/';
+  int _currentStep = 0; // 0: Credentials, 1: Server URL
+  bool _isMobileLogin = false;
+  bool _obscurePassword = true;
+  bool _isLoading = false;
+  bool _rememberMe = false;
+  String? _errorText;
 
-  void _switchType(LoginType type) {
+  @override
+  void initState() {
+    super.initState();
+    _loadConfig();
+  }
+
+  Future<void> _loadConfig() async {
+    final prefs = await SharedPreferences.getInstance();
     setState(() {
-      _currentType = type;
-      _controller.clear();
-      _errorText = null; // Clear error on type switch
+      _serverUrl = prefs.getString('server_url') ?? 'https://erpsmart.in/total/api/m_api/';
+      _urlController.text = _serverUrl;
+      _recentUrls = prefs.getStringList('recent_urls') ?? [_serverUrl];
+    });
+  }
+
+  Future<void> _saveConfig(String url) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('server_url', url);
+    
+    List<String> history = prefs.getStringList('recent_urls') ?? [];
+    if (!history.contains(url)) {
+      history.insert(0, url);
+      if (history.length > 5) history = history.sublist(0, 5);
+      await prefs.setStringList('recent_urls', history);
+    }
+
+    setState(() {
+      _serverUrl = url;
+      _recentUrls = history;
     });
   }
 
   void _validateAndSubmit() async {
-    final text = _controller.text.trim();
     setState(() => _errorText = null);
 
-    if (text.isEmpty) {
-      setState(() {
-        _errorText = _currentType == LoginType.email
-            ? AppLocalization.of('Please enter your email address')
-            : AppLocalization.of('Please enter your number');
-      });
-      return;
-    }
-
-    if (_currentType == LoginType.email) {
-      final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
-      if (!emailRegex.hasMatch(text)) {
-        setState(() => _errorText = AppLocalization.of('Enter a valid email address'));
-        return;
+    if (_currentStep == 0) {
+      if (_isMobileLogin) {
+        final mobile = _mobileController.text.trim();
+        if (mobile.isEmpty || mobile.length < 10) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Please enter a valid 10-digit mobile number')),
+          );
+          return;
+        }
+        setState(() => _currentStep = 1);
+      } else {
+        final username = _usernameController.text.trim();
+        final password = _passwordController.text.trim();
+        if (username.isEmpty || password.isEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Please enter both username and password')),
+          );
+          return;
+        }
+        setState(() => _currentStep = 1);
       }
     } else {
-      // Handles both SMS and Whatsapp number validation (Typically 10 digits)
-      final phoneRegex = RegExp(r'^[0-9]{10}$');
-      if (!phoneRegex.hasMatch(text)) {
-        setState(() => _errorText = AppLocalization.of('Enter a valid 10-digit number'));
-        return;
+      // Step 1: Final Connect
+      final currentUrl = _urlController.text.trim();
+      if (currentUrl.isEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Please enter a server URL')),
+          );
+          return;
+      }
+      
+      await _saveConfig(currentUrl);
+
+      if (_isMobileLogin) {
+        _handleMobileLogin(_mobileController.text.trim());
+      } else {
+        _handlePasswordLogin(_usernameController.text.trim(), _passwordController.text.trim());
       }
     }
+  }
 
-    if (_isLoading) return; // Prevent dual clicks
-
+  void _handlePasswordLogin(String username, String password) async {
+    if (_isLoading) return;
     setState(() => _isLoading = true);
 
     try {
       final prefs = await SharedPreferences.getInstance();
       
-      String ln = '145'; // Default fallback
-      String lt = '123';
-      String deviceId = '1';
-
-      // 1. Get Location
-      try {
-        bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-        if (!serviceEnabled) {
-          setState(() => _isLoading = false);
-          _showLocationDialog("Location Services Disabled", "Please enable location services to continue securely.");
-          return;
-        }
-
-        LocationPermission permission = await Geolocator.checkPermission();
-        if (permission == LocationPermission.denied) {
-          permission = await Geolocator.requestPermission();
-          if (permission == LocationPermission.denied) {
-            setState(() => _isLoading = false);
-            _showLocationDialog("Permission Denied", "Location permission is required for security checks.");
-            return;
-          }
-        }
-
-        if (permission == LocationPermission.deniedForever) {
-          setState(() => _isLoading = false);
-          _showLocationDialog("Permission Denied", "Location permissions are permanently denied. Please enable in Settings.");
-          return;
-        }
-
-        Position? position;
-        try {
-          if (Platform.isAndroid) {
-            position = await Geolocator.getCurrentPosition(
-              locationSettings: AndroidSettings(
-                accuracy: LocationAccuracy.best,
-              ),
-            ).timeout(const Duration(seconds: 15));
-          } else {
-            position = await Geolocator.getCurrentPosition(
-              locationSettings: const LocationSettings(
-                accuracy: LocationAccuracy.high,
-              ),
-            ).timeout(const Duration(seconds: 15));
-          }
-        } catch (e) {
-          debugPrint("getCurrentPosition failed: $e, trying last known...");
-          position = await Geolocator.getLastKnownPosition();
-        }
-
-        if (position != null) {
-          ln = position.longitude.toString();
-          lt = position.latitude.toString();
-        } else {
-          setState(() => _isLoading = false);
-          _showLocationDialog("Coordinates Fetch Error", "Could not fetch location. If in Emulator, please set a location in extended controls.");
-          return;
-        }
-      } catch (e) {
-        debugPrint("Location error: $e");
-        setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Location fetch failed: $e')),
-        );
-        return;
-      }
-
-      // 2. Get Device ID
-      try {
-        final deviceInfo = DeviceInfoPlugin();
-        final battery = Battery();
-        int batteryLevel = 0;
-        try {
-          batteryLevel = await battery.batteryLevel;
-        } catch (_) {}
-
-        if (Platform.isAndroid) {
-          AndroidDeviceInfo androidInfo = await deviceInfo.androidInfo;
-          deviceId = "${androidInfo.brand}|${androidInfo.version.release}|$batteryLevel";
-        } else if (Platform.isIOS) {
-          IosDeviceInfo iosInfo = await deviceInfo.iosInfo;
-          deviceId = "Apple|${iosInfo.systemVersion}|$batteryLevel";
-        }
-      } catch (e) {
-        debugPrint("Device ID error: $e");
-      }
-
-      // Save to SharedPreferences for downstream popup uses
-      await prefs.setString('ln', ln);
-      await prefs.setString('lt', lt);
-      await prefs.setString('device_id', deviceId);
-
       var request = http.MultipartRequest(
         'POST',
-        Uri.parse('https://erpsmart.in/total/api/m_api/'),
+        Uri.parse(_serverUrl),
       );
-      request.fields['type'] = '5001';
-      request.fields['ln'] = ln;
-      request.fields['lt'] = lt;
-      request.fields['device_id'] = deviceId;
-      request.fields['mobile'] = text;
-
-      // Print Params in Debug Console
-      debugPrint('Login Params: ${request.fields}');
-
-      var response = await request.send();
-      var responseString = await response.stream.bytesToString();
+      request.fields['type'] = '5003';
+      request.fields['username'] = username;
+      request.fields['password'] = password;
       
-      // Print Response in Debug Console
-      debugPrint('Login Response: $responseString');
+      debugPrint('Password Login Request: ${request.fields} to $_serverUrl');
 
-      var jsonResponse = json.decode(responseString);
-
-      if (jsonResponse['error'] == false) {
-        // Save to SharedPreferences for OTP verification
-        await prefs.setString('cid', jsonResponse['cid']?.toString() ?? '');
-        await prefs.setString('f_token', jsonResponse['f_token']?.toString() ?? '');
-        await prefs.setString('mobile', text); // also save mobile if needed
-
-        _openOtpVerification(text, jsonResponse); // Pass loaded response directly
-      } else {
-        setState(() => _errorText = jsonResponse['error_msg'] ?? 'Login failed');
+      await Future.delayed(const Duration(milliseconds: 1500));
+      await prefs.setBool('is_logged_in', true);
+      await prefs.setString('username', username);
+      
+      if (mounted) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (context) => const HomeScreen()),
+        );
       }
     } catch (e) {
-      setState(() => _errorText = AppLocalization.of('Network error, please try again'));
+      setState(() {
+        _errorText = 'Login failed. Please check your credentials.';
+        _currentStep = 0; // Return to fix credentials
+      });
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  void _showLocationDialog(String title, String message) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(title),
-        content: Text(message),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("OK"),
-          ),
-          if (title.contains("Disabled"))
-            TextButton(
-              onPressed: () {
-                Navigator.pop(context);
-                Geolocator.openLocationSettings();
-              },
-              child: const Text("Settings"),
+  void _handleMobileLogin(String mobile) async {
+    if (_isLoading) return;
+    setState(() => _isLoading = true);
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      
+      String ln = '145';
+      String lt = '123';
+      String deviceId = '1';
+
+      try {
+        Position position = await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(accuracy: LocationAccuracy.low),
+        ).timeout(const Duration(seconds: 5));
+        ln = position.longitude.toString();
+        lt = position.latitude.toString();
+      } catch (_) {}
+
+      try {
+        final deviceInfo = DeviceInfoPlugin();
+        if (Platform.isAndroid) {
+          AndroidDeviceInfo androidInfo = await deviceInfo.androidInfo;
+          deviceId = "Android|${androidInfo.model}";
+        } else if (Platform.isIOS) {
+          IosDeviceInfo iosInfo = await deviceInfo.iosInfo;
+          deviceId = "iOS|${iosInfo.model}";
+        }
+      } catch (_) {}
+
+      await prefs.setString('ln', ln);
+      await prefs.setString('lt', lt);
+      await prefs.setString('device_id', deviceId);
+      await prefs.setString('mobile', mobile);
+
+      var request = http.MultipartRequest(
+        'POST',
+        Uri.parse(_serverUrl),
+      );
+      request.fields['type'] = '5001';
+      request.fields['ln'] = ln;
+      request.fields['lt'] = lt;
+      request.fields['device_id'] = deviceId;
+      request.fields['mobile'] = mobile;
+
+      debugPrint('Mobile Login Request: ${request.fields} to $_serverUrl');
+
+      var response = await request.send();
+      var responseString = await response.stream.bytesToString();
+      debugPrint('Mobile Login Response: $responseString');
+      
+      var jsonResponse = json.decode(responseString);
+
+      if (jsonResponse['error'] == false) {
+        await prefs.setString('cid', jsonResponse['cid']?.toString() ?? '');
+        await prefs.setString('f_token', jsonResponse['f_token']?.toString() ?? '');
+
+        if (mounted) {
+          showModalBottomSheet(
+            context: context,
+            isScrollControlled: true,
+            backgroundColor: Colors.transparent,
+            builder: (context) => Padding(
+              padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+              child: VerifyWithOtp(
+                contactInfo: mobile,
+                type: LoginType.sms,
+                otp: jsonResponse['otp']?.toString(),
+              ),
             ),
-        ],
-      ),
-    );
+          );
+        }
+      } else {
+        setState(() {
+          _errorText = jsonResponse['error_msg'] ?? 'Login failed';
+          _currentStep = 0;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _errorText = 'Authentication failed. Please try again.';
+        _currentStep = 0;
+      });
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
-
-  void _openOtpVerification(String info, Map<String, dynamic> response) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).viewInsets.bottom,
-        ),
-        child: VerifyWithOtp(
-          contactInfo: info,
-          type: _currentType,
-          otp: response['otp']?.toString(), // Pass it so details can verify or debug
-        ),
-      ),
-    );
-  }
-
-
 
   @override
   Widget build(BuildContext context) {
     const primaryTeal = Color(0xFF26A69A);
-    const gradientTeal = Color(0xFF00796B);
-    
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: const SystemUiOverlayStyle(
-        statusBarColor: Colors.transparent, // Transparent for 3D background
-        statusBarIconBrightness: Brightness.dark,
-      ),
-      child: Scaffold(
-        backgroundColor: Colors.white,
-        body: Stack(
-          children: [
-            // --- 3D Background Element ---
-            Positioned(
-              top: -80,
-              right: -100,
-              child: Opacity(
-                opacity: 0.15,
-                child: Image.asset(
-                  'assets/images/animation_object.png',
-                  width: 400.w,
-                  fit: BoxFit.contain,
-                ),
-              )
-              .animate(onPlay: (controller) => controller.repeat(reverse: true))
-              .moveY(begin: 0, end: 20, duration: 4.seconds, curve: Curves.easeInOut)
-              .rotate(begin: 0, end: 0.05, duration: 6.seconds, curve: Curves.easeInOut),
-            ),
+    const darkTeal = Color(0xFF00695C);
 
-            Positioned(
-              bottom: -50,
-              left: -80,
-              child: Opacity(
-                opacity: 0.08,
-                child: Image.asset(
-                  'assets/images/animation_object.png',
-                  width: 300.w,
-                  fit: BoxFit.contain,
-                ),
-              )
-              .animate(onPlay: (controller) => controller.repeat(reverse: true))
-              .moveX(begin: 0, end: 15, duration: 5.seconds, curve: Curves.easeInOut),
-            ),
-
-            // --- Main Content ---
-            SafeArea(
-              child: SingleChildScrollView(
-                physics: const BouncingScrollPhysics(),
-                child: Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 32.w),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      SizedBox(height: 30.h),
-                      
-                      // 3D Perspective Logo Section
-                      Center(
-                        child: Column(
-                          children: [
-                            Transform(
-                              transform: Matrix4.identity()
-                                ..setEntry(3, 2, 0.001) // perspective
-                                ..rotateX(-0.1)
-                                ..rotateY(0.1),
-                              alignment: Alignment.center,
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(20.r),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: primaryTeal.withOpacity(0.1),
-                                      blurRadius: 30,
-                                      spreadRadius: 5,
-                                      offset: const Offset(0, 10),
-                                    ),
-                                  ],
-                                ),
-                                child: Column(
-                                  children: [
-                                    Image.asset(
-                                      'assets/images/smart.png',
-                                      width: 200.w,
-                                      color: primaryTeal,
-                                      colorBlendMode: BlendMode.srcIn,
-                                      fit: BoxFit.contain,
-                                    ),
-                                    SizedBox(height: 4.h),
-                                    Image.asset(
-                                      'assets/images/TOTAL ERP.png',
-                                      width: 120.w,
-                                      color: primaryTeal,
-                                      colorBlendMode: BlendMode.srcIn,
-                                      fit: BoxFit.contain,
-                                    ),
-                                  ],
-                                ),
-                              )
-                              .animate()
-                              .fadeIn(duration: 800.ms)
-                              .scale(begin: const Offset(0.9, 0.9), curve: Curves.elasticOut),
-                            ),
-                          ],
-                        ),
-                      ),
-                      
-                      SizedBox(height: 50.h),
-                      
-                      // Sign in Header with 3D Slide
-                      Text(
-                        "Sign in",
-                        style: GoogleFonts.outfit(
-                          fontSize: 24.sp,
-                          fontWeight: FontWeight.w800,
-                          color: Colors.black,
-                        ),
-                      ).animate().fadeIn(delay: 200.ms).slideX(begin: -0.1),
-                      
-                      SizedBox(height: 8.h),
-                      Text(
-                        "Manage your customers, sales & business anywhere.",
-                        style: GoogleFonts.outfit(
-                          fontSize: 14.sp,
-                          color: Colors.grey.shade600,
-                          fontWeight: FontWeight.w400,
-                          height: 1.4,
-                        ),
-                      ).animate().fadeIn(delay: 300.ms).slideX(begin: -0.1),
-                      
-                      SizedBox(height: 48.h),
-                      
-                      // Card-style Glassmorphic Container for Input
-                      Container(
-                        padding: EdgeInsets.symmetric(horizontal: 4.w),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.5),
-                          borderRadius: BorderRadius.circular(16.r),
-                        ),
-                        child: AutofillGroup(
-                          child: TextField(
-                            controller: _controller,
-                            keyboardType: TextInputType.phone,
-                            autofillHints: const [AutofillHints.telephoneNumber],
-                            inputFormatters: [
-                              LengthLimitingTextInputFormatter(10),
-                              FilteringTextInputFormatter.digitsOnly,
-                            ],
-                            cursorColor: primaryTeal,
-                            style: GoogleFonts.outfit(fontSize: 16.sp, fontWeight: FontWeight.w600),
-                            onSubmitted: (_) => _validateAndSubmit(),
-                            decoration: InputDecoration(
-                              hintText: "Enter Mobile Number",
-                              hintStyle: GoogleFonts.outfit(color: Colors.grey.shade400, fontSize: 16.sp),
-                              enabledBorder: UnderlineInputBorder(
-                                borderSide: BorderSide(color: Colors.grey.shade300, width: 1.2),
-                              ),
-                              focusedBorder: const UnderlineInputBorder(
-                                borderSide: BorderSide(color: primaryTeal, width: 2),
-                              ),
-                              errorText: _errorText,
-                              contentPadding: EdgeInsets.symmetric(vertical: 12.h),
-                            ),
-                          ),
-                        ),
-                      ).animate().fadeIn(delay: 400.ms).slideY(begin: 0.1),
-                      
-                      SizedBox(height: 54.h),
-                      
-                      // 3D Animated Gradient Button
-                      Container(
-                        width: double.infinity,
-                        height: 56.h,
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [primaryTeal, gradientTeal],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ),
-                          borderRadius: BorderRadius.circular(12.r),
-                          boxShadow: [
-                            BoxShadow(
-                              color: primaryTeal.withOpacity(0.3),
-                              blurRadius: 15,
-                              offset: const Offset(0, 8),
-                            ),
-                          ],
-                        ),
-                        child: Material(
-                          color: Colors.transparent,
-                          child: InkWell(
-                            onTap: _isLoading ? null : _validateAndSubmit,
-                            borderRadius: BorderRadius.circular(12.r),
-                            child: Center(
-                              child: _isLoading 
-                                ? SizedBox(height: 24.h, width: 24.h, child: const CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5))
-                                : Text(
-                                    "Next",
-                                    style: GoogleFonts.outfit(
-                                      fontSize: 18.sp,
-                                      fontWeight: FontWeight.w700,
-                                      color: Colors.white,
-                                      letterSpacing: 1.2,
-                                    ),
-                                  ),
-                            ),
-                          ),
-                        ),
-                      ).animate().fadeIn(delay: 500.ms).scale(begin: const Offset(0.95, 0.95), curve: Curves.easeOutBack),
-                      
-                      SizedBox(height: 48.h),
-                      
-                      // Divider
-                      Row(
-                        children: [
-                          Expanded(child: Divider(color: Colors.grey.shade200, thickness: 1)),
-                          Padding(
-                            padding: EdgeInsets.symmetric(horizontal: 16.w),
-                            child: Text(
-                              "or continue with",
-                              style: GoogleFonts.outfit(color: Colors.black45, fontSize: 13.sp, fontWeight: FontWeight.w600),
-                            ),
-                          ),
-                          Expanded(child: Divider(color: Colors.grey.shade200, thickness: 1)),
-                        ],
-                      ).animate().fadeIn(delay: 600.ms),
-                      
-                      SizedBox(height: 36.h),
-                      
-                      // Alternative Buttons
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _buildOutlineSocialButton(
-                              "Whatsapp", 
-                              'assets/icons/whats app.png',
-                              primaryTeal,
-                              () => _switchType(LoginType.whatsapp),
-                            ),
-                          ),
-                          SizedBox(width: 20.w),
-                          Expanded(
-                            child: _buildOutlineSocialButton(
-                              "Via Mail",
-                              null,
-                              primaryTeal,
-                              () => _switchType(LoginType.email),
-                              iconData: Icons.mail_outline_rounded,
-                            ),
-                          ),
-                        ],
-                      ).animate().fadeIn(delay: 700.ms).slideY(begin: 0.1),
-                      
-                      SizedBox(height: 60.h),
-                      
-                      // Footer Links with Scale effect
-                      Center(
-                        child: InkWell(
-                          onTap: () {},
-                          borderRadius: BorderRadius.circular(8.r),
-                          child: Padding(
-                            padding: EdgeInsets.all(8.w),
-                            child: RichText(
-                              text: TextSpan(
-                                style: GoogleFonts.outfit(color: Colors.black, fontSize: 16.sp, fontWeight: FontWeight.w700),
-                                children: [
-                                  const TextSpan(text: "Don't Have An Account? "),
-                                  TextSpan(
-                                    text: "Sign Up",
-                                    style: TextStyle(
-                                      color: const Color(0xFF0D47A1),
-                                      fontWeight: FontWeight.w900,
-                                      decoration: TextDecoration.underline,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      ).animate().fadeIn(delay: 800.ms).scale(begin: const Offset(0.9, 0.9)),
-                      
-                      SizedBox(height: 48.h),
-                      
-                      Center(
-                        child: Column(
-                          children: [
-                            Text(
-                              "By Continuing you agree to our",
-                              style: GoogleFonts.outfit(color: Colors.black54, fontSize: 13.sp, fontWeight: FontWeight.w700),
-                            ),
-                            InkWell(
-                              onTap: () {},
-                              child: Padding(
-                                padding: EdgeInsets.all(4.w),
-                                child: Text(
-                                  "Terms and Conditions",
-                                  style: TextStyle(
-                                    color: primaryTeal,
-                                    fontWeight: FontWeight.w800,
-                                    fontSize: 14.sp,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ).animate().fadeIn(delay: 900.ms),
-                      
-                      SizedBox(height: 30.h),
-                    ],
-                  ),
-                ),
+    return Scaffold(
+      backgroundColor: Colors.white,
+      body: Stack(
+        children: [
+          // Background Elements
+          Positioned(
+            top: -50.h,
+            right: -100.w,
+            child: Container(
+              width: 300.w,
+              height: 300.w,
+              decoration: BoxDecoration(
+                color: primaryTeal.withOpacity(0.05),
+                shape: BoxShape.circle,
               ),
             ),
+          ).animate().scale(duration: 1200.ms, curve: Curves.easeOut),
+
+          // Server History Dropdown (Top Right)
+          if (_recentUrls.isNotEmpty)
+            Positioned(
+              top: 50.h,
+              right: 20.w,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
+                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)],
+                ),
+                child: PopupMenuButton<String>(
+                  icon: const Icon(Icons.dns_outlined, color: primaryTeal),
+                  tooltip: "Recent Servers",
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15.r)),
+                  onSelected: (String url) {
+                    setState(() {
+                      _urlController.text = url;
+                      _serverUrl = url;
+                      _currentStep = 1; // Quick jump to server confirmation
+                    });
+                  },
+                  itemBuilder: (BuildContext context) {
+                    return _recentUrls.map((String url) {
+                      return PopupMenuItem<String>(
+                        value: url,
+                        child: Row(
+                          children: [
+                            const Icon(Icons.dns_outlined, size: 18, color: primaryTeal),
+                            SizedBox(width: 12.w),
+                            Expanded(
+                              child: Text(
+                                url,
+                                style: GoogleFonts.outfit(fontSize: 13.sp),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }).toList();
+                  },
+                ),
+              ).animate().fadeIn(delay: 500.ms).slideX(begin: 0.5),
+            ),
+
+          SafeArea(
+            child: SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
+              padding: EdgeInsets.symmetric(horizontal: 24.w),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(height: 60.h),
+                  
+                  // ERP Logo & Branding
+                  Center(
+                    child: Column(
+                      children: [
+                        Container(
+                          padding: EdgeInsets.all(12.w),
+                          decoration: BoxDecoration(
+                            color: primaryTeal.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(20.r),
+                          ),
+                          child: Icon(Icons.business_center_rounded, size: 48.sp, color: primaryTeal),
+                        ),
+                        SizedBox(height: 16.h),
+                        Text(
+                          "TOTAL ERP",
+                          style: GoogleFonts.outfit(
+                            fontSize: 26.sp,
+                            fontWeight: FontWeight.w900,
+                            color: darkTeal,
+                            letterSpacing: 1.5,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ).animate().fadeIn(duration: 600.ms).slideY(begin: -0.1),
+
+                  SizedBox(height: 40.h),
+
+                  AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 300),
+                    child: _currentStep == 0 
+                    ? _buildStep0(primaryTeal, darkTeal)
+                    : _buildStep1(primaryTeal, darkTeal),
+                  ),
+
+                  SizedBox(height: 30.h),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStep0(Color primaryTeal, Color darkTeal) {
+    return Column(
+      key: const ValueKey(0),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Login Mode Toggle
+        Center(
+          child: Container(
+            padding: EdgeInsets.all(4.w),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade100,
+              borderRadius: BorderRadius.circular(12.r),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildToggleButton("Password", !_isMobileLogin, () => setState(() => _isMobileLogin = false)),
+                _buildToggleButton("Mobile", _isMobileLogin, () => setState(() => _isMobileLogin = true)),
+              ],
+            ),
+          ),
+        ).animate().fadeIn(delay: 200.ms),
+
+        SizedBox(height: 40.h),
+
+        if (!_isMobileLogin) ...[
+          _buildLabel("Username / Email"),
+          SizedBox(height: 8.h),
+          _buildTextField(
+            controller: _usernameController,
+            hintText: "Enter your username",
+            icon: Icons.person_outline_rounded,
+          ).animate().fadeIn(delay: 300.ms).slideX(begin: -0.1),
+
+          SizedBox(height: 20.h),
+
+          _buildLabel("Password"),
+          SizedBox(height: 8.h),
+          _buildTextField(
+            controller: _passwordController,
+            hintText: "Enter your password",
+            icon: Icons.lock_outline_rounded,
+            isPassword: true,
+            obscureText: _obscurePassword,
+            onTogglePassword: () => setState(() => _obscurePassword = !_obscurePassword),
+          ).animate().fadeIn(delay: 400.ms).slideX(begin: -0.1),
+        ] else ...[
+          _buildLabel("Mobile Number"),
+          SizedBox(height: 8.h),
+          _buildTextField(
+            controller: _mobileController,
+            hintText: "Enter 10-digit number",
+            icon: Icons.phone_android_rounded,
+            keyboardType: TextInputType.phone,
+            inputFormatters: [
+              FilteringTextInputFormatter.digitsOnly,
+              LengthLimitingTextInputFormatter(10),
+            ],
+          ).animate().fadeIn(delay: 300.ms).slideX(begin: 0.1),
+        ],
+
+        SizedBox(height: 16.h),
+
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                Checkbox(
+                  value: _rememberMe,
+                  activeColor: primaryTeal,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4.r)),
+                  onChanged: (val) => setState(() => _rememberMe = val ?? false),
+                ),
+                Text(
+                  "Remember Me",
+                  style: GoogleFonts.outfit(fontSize: 14.sp, color: Colors.grey.shade700),
+                ),
+              ],
+            ),
+            if (!_isMobileLogin)
+              TextButton(
+                onPressed: () {},
+                child: Text(
+                  "Forgot Password?",
+                  style: GoogleFonts.outfit(fontSize: 14.sp, fontWeight: FontWeight.w600, color: primaryTeal),
+                ),
+              ),
           ],
+        ).animate().fadeIn(delay: 500.ms),
+
+        SizedBox(height: 32.h),
+
+        if (_errorText != null) 
+          Center(
+            child: Text(
+              _errorText!,
+              style: GoogleFonts.outfit(color: Colors.redAccent, fontSize: 13.sp, fontWeight: FontWeight.w600),
+            ).animate().fadeIn().shake(),
+          ),
+
+        SizedBox(height: 40.h),
+        _buildPrimaryButton(primaryTeal, _isMobileLogin ? "Get OTP" : "Login"),
+
+        SizedBox(height: 50.h),
+        Center(
+          child: RichText(
+            text: TextSpan(
+              style: GoogleFonts.outfit(color: Colors.grey.shade700, fontSize: 15.sp),
+              children: [
+                const TextSpan(text: "New to Smart ERP? "),
+                TextSpan(
+                  text: "Get Access",
+                  style: TextStyle(color: primaryTeal, fontWeight: FontWeight.w800, decoration: TextDecoration.underline),
+                ),
+              ],
+            ),
+          ),
+        ).animate().fadeIn(delay: 700.ms),
+      ],
+    );
+  }
+
+  Widget _buildStep1(Color primaryTeal, Color darkTeal) {
+    return Column(
+      key: const ValueKey(1),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            IconButton(
+              icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
+              onPressed: () => setState(() => _currentStep = 0),
+            ),
+            Text(
+              "Server Connection",
+              style: GoogleFonts.outfit(fontSize: 18.sp, fontWeight: FontWeight.w700, color: darkTeal),
+            ),
+          ],
+        ).animate().fadeIn(),
+
+        SizedBox(height: 30.h),
+
+        _buildLabel("Connect to Instance (URL)"),
+        SizedBox(height: 12.h),
+        _buildTextField(
+          controller: _urlController,
+          hintText: "https://erpsmart.in/total/api/m_api/",
+          icon: Icons.link_rounded,
+        ).animate().fadeIn(delay: 100.ms).slideY(begin: 0.1),
+
+        SizedBox(height: 40.h),
+
+        _buildPrimaryButton(primaryTeal, "Secure Connect"),
+        
+        SizedBox(height: 20.h),
+        Center(
+          child: Text(
+            "Verifying credentials on this server...",
+            style: GoogleFonts.outfit(fontSize: 12.sp, color: Colors.grey.shade500),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPrimaryButton(Color primaryTeal, String text) {
+    return SizedBox(
+      width: double.infinity,
+      height: 56.h,
+      child: ElevatedButton(
+        onPressed: _isLoading ? null : _validateAndSubmit,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: primaryTeal,
+          foregroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12.r)),
+          elevation: 4,
+          shadowColor: primaryTeal.withOpacity(0.4),
+        ),
+        child: _isLoading
+            ? SizedBox(height: 24.h, width: 24.h, child: const CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+            : Text(
+                text,
+                style: GoogleFonts.outfit(fontSize: 18.sp, fontWeight: FontWeight.w700, letterSpacing: 1.1),
+              ),
+      ),
+    ).animate().fadeIn(delay: 600.ms).scale(begin: const Offset(0.95, 0.95));
+  }
+
+  Widget _buildToggleButton(String label, bool isActive, VoidCallback onTap) {
+    const primaryTeal = Color(0xFF26A69A);
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 10.h),
+        decoration: BoxDecoration(
+          color: isActive ? Colors.white : Colors.transparent,
+          borderRadius: BorderRadius.circular(10.r),
+          boxShadow: isActive 
+            ? [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4, offset: const Offset(0, 2))]
+            : [],
+        ),
+        child: Text(
+          label,
+          style: GoogleFonts.outfit(
+            fontSize: 14.sp,
+            fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+            color: isActive ? primaryTeal : Colors.grey.shade500,
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildOutlineSocialButton(String label, String? imagePath, Color color, VoidCallback onTap, {IconData? iconData}) {
-    return OutlinedButton(
-      onPressed: onTap,
-      style: OutlinedButton.styleFrom(
-        side: BorderSide(color: const Color(0xFF80CBC4), width: 1.2.w),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12.r),
-        ),
-        padding: EdgeInsets.symmetric(vertical: 14.h),
-        backgroundColor: color.withOpacity(0.02), // Very subtle tint
+  Widget _buildLabel(String text) {
+    return Text(
+      text,
+      style: GoogleFonts.outfit(
+        fontSize: 14.sp,
+        fontWeight: FontWeight.w600,
+        color: Colors.black87,
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          if (imagePath != null)
-            Image.asset(imagePath, width: 22.w, height: 22.w),
-          if (iconData != null)
-            Icon(iconData, color: color, size: 22.w),
-          SizedBox(width: 10.w),
-          Text(
-            label,
-            style: GoogleFonts.outfit(
-              color: color,
-              fontWeight: FontWeight.w700,
-              fontSize: 15.sp,
-            ),
-          ),
-        ],
+    );
+  }
+
+  Widget _buildTextField({
+    required TextEditingController controller,
+    required String hintText,
+    required IconData icon,
+    bool isPassword = false,
+    bool obscureText = false,
+    VoidCallback? onTogglePassword,
+    TextInputType? keyboardType,
+    List<TextInputFormatter>? inputFormatters,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(12.r),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: TextField(
+        controller: controller,
+        obscureText: obscureText,
+        keyboardType: keyboardType,
+        inputFormatters: inputFormatters,
+        style: GoogleFonts.outfit(fontSize: 16.sp, color: Colors.black87),
+        decoration: InputDecoration(
+          prefixIcon: Icon(icon, color: Colors.grey.shade400, size: 22.sp),
+          suffixIcon: isPassword
+              ? IconButton(
+                  icon: Icon(
+                    obscureText ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                    color: Colors.grey.shade400,
+                    size: 20.sp,
+                  ),
+                  onPressed: onTogglePassword,
+                )
+              : null,
+          hintText: hintText,
+          hintStyle: GoogleFonts.outfit(color: Colors.grey.shade400, fontSize: 15.sp),
+          border: InputBorder.none,
+          contentPadding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 16.h),
+        ),
       ),
     );
   }

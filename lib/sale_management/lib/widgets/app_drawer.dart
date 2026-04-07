@@ -4,6 +4,8 @@ import '../Sales_Module/help_support_screen.dart';
 import '../Sales_Module/settings_screen.dart';
 import '../Proforma_Invoice_Module/all_voice_screen.dart';
 
+import '../Proforma_Invoice_Module/generate_info.dart';
+
 class AppDrawer extends StatelessWidget {
   const AppDrawer({super.key});
 
@@ -23,7 +25,6 @@ class AppDrawer extends StatelessWidget {
                 const _DrawerTile(
                   icon: Icons.dashboard_rounded,
                   label: 'Sales Dashboard',
-                  isActive: true,
                 ),
                 _DrawerTile(
                   icon: Icons.description_outlined,
@@ -32,9 +33,7 @@ class AppDrawer extends StatelessWidget {
                     Navigator.pop(context); // Drawer close
                     Navigator.push(
                       context,
-                      MaterialPageRoute(
-                        builder: (_) => const AllInvoicePage(),
-                      ),
+                      MaterialPageRoute(builder: (_) => const AllInvoicePage()),
                     );
                   },
                 ),
@@ -58,9 +57,18 @@ class AppDrawer extends StatelessWidget {
                   icon: Icons.approval_outlined,
                   label: 'Invoice Approval',
                 ),
-                const _DrawerTile(
+                _DrawerTile(
                   icon: Icons.flash_on_outlined,
                   label: 'Direct Invoice',
+                  onTap: () {
+                    Navigator.pop(context); // Drawer close
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const GenerateInfoScreen(),
+                      ),
+                    );
+                  },
                 ),
                 // const _DrawerDivider(),
                 //
@@ -111,7 +119,9 @@ class _DrawerHeader extends StatelessWidget {
                       color: Colors.white.withOpacity(0.18),
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
-                          color: Colors.white.withOpacity(0.3), width: 1),
+                        color: Colors.white.withOpacity(0.3),
+                        width: 1,
+                      ),
                     ),
                     child: const Icon(
                       Icons.show_chart_rounded,
@@ -155,8 +165,11 @@ class _DrawerHeader extends StatelessWidget {
                         color: Colors.white.withOpacity(0.15),
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(Icons.close_rounded,
-                          color: Colors.white70, size: 16),
+                      child: const Icon(
+                        Icons.close_rounded,
+                        color: Colors.white70,
+                        size: 16,
+                      ),
                     ),
                   ),
                 ],
@@ -169,7 +182,9 @@ class _DrawerHeader extends StatelessWidget {
                   color: Colors.white.withOpacity(0.13),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                      color: Colors.white.withOpacity(0.2), width: 1),
+                    color: Colors.white.withOpacity(0.2),
+                    width: 1,
+                  ),
                 ),
                 child: Row(
                   children: [
@@ -220,13 +235,16 @@ class _DrawerHeader extends StatelessWidget {
                     ),
                     Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 4),
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
                         color: const Color(0xFF00E676).withOpacity(0.20),
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(
-                            color: const Color(0xFF00E676).withOpacity(0.35),
-                            width: 1),
+                          color: const Color(0xFF00E676).withOpacity(0.35),
+                          width: 1,
+                        ),
                       ),
                       child: const Text(
                         'Active',
@@ -356,7 +374,9 @@ class _DrawerTile extends StatelessWidget {
                 if (badge != null)
                   Container(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 7, vertical: 2),
+                      horizontal: 7,
+                      vertical: 2,
+                    ),
                     decoration: BoxDecoration(
                       color: badgeColor,
                       borderRadius: BorderRadius.circular(10),
@@ -388,8 +408,7 @@ class _DrawerFooter extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
       decoration: const BoxDecoration(
         color: Colors.white,
-        border:
-        Border(top: BorderSide(color: AppColors.divider, width: 1)),
+        border: Border(top: BorderSide(color: AppColors.divider, width: 1)),
       ),
       child: SafeArea(
         top: false,
@@ -402,9 +421,7 @@ class _DrawerFooter extends StatelessWidget {
               onTap: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(
-                    builder: (context) => const SettingsPage(),
-                  ),
+                  MaterialPageRoute(builder: (context) => const SettingsPage()),
                 );
               },
             ),

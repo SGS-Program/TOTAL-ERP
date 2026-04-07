@@ -1,26 +1,8 @@
 import 'package:flutter/material.dart';
-import '../widgets/drawer_screen.dart';
+import '../widgets/app_drawer.dart';
 import 'payment_screen.dart';
-
-class CatalogProduct {
-  final String id;
-  final String name;
-  final int stock;
-  final double price;
-  final String category;
-  int selectedQty;
-  bool isAdded;
-
-  CatalogProduct({
-    required this.id,
-    required this.name,
-    required this.stock,
-    required this.price,
-    required this.category,
-    this.selectedQty = 1,
-    this.isAdded = false,
-  });
-}
+export 'product_model.dart';
+import 'product_model.dart';
 
 class InvoiceCatalogScreen extends StatefulWidget {
   const InvoiceCatalogScreen({super.key});
@@ -122,21 +104,8 @@ class _InvoiceCatalogScreenState extends State<InvoiceCatalogScreen> {
           'Invoice',
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
-        actions: [
-          Builder(
-            builder: (context) => IconButton(
-              icon: const CircleAvatar(
-                radius: 14,
-                backgroundColor: Colors.white24,
-                child: Icon(Icons.person, color: Colors.white, size: 18),
-              ),
-              onPressed: () => Scaffold.of(context).openDrawer(),
-            ),
-          ),
-          const SizedBox(width: 8),
-        ],
       ),
-      drawer: const SaleManagementDrawer(),
+      drawer: const AppDrawer(),
       body: Column(
         children: [
           // White Header Section
@@ -441,7 +410,10 @@ class _InvoiceCatalogScreenState extends State<InvoiceCatalogScreen> {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (_) => const InvoiceScreen(),
+                            builder: (_) => InvoiceScreen(
+                              totalAmount: _totalAmount,
+                              selectedProducts: _products.where((p) => p.isAdded).toList(),
+                            ),
                           ),
                         );
                       },
