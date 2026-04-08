@@ -2,6 +2,7 @@ import 'package:crm/Meeting/meeting_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:crm/Reports/report_screen.dart';
 import 'package:crm/services/profile_service.dart';
+import 'package:crm_admin_app/Screens/dashboard_screen.dart' as admin_app;
 import '../Home/dashboard_screen.dart';
 import '../Settings/account_setting_screen.dart';
 import '../Settings/setting_screen.dart';
@@ -356,6 +357,23 @@ class _DrawerScreenState extends State<DrawerScreen> {
                     color: const Color(0xFF26A69A),
                   ),
                   title: 'Report',
+                ),
+                _buildDivider(),
+                _buildDrawerItem(
+                  icon: const Icon(
+                    Icons.admin_panel_settings_outlined,
+                    color: Color(0xFF26A69A),
+                  ),
+                  title: 'CRM Admin',
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const admin_app.DashboardScreen(),
+                      ),
+                    );
+                  },
                 ),
                 _buildDivider(),
                 _buildDrawerItem(

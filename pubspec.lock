@@ -266,7 +266,7 @@ packages:
   crm_admin_app:
     dependency: "direct main"
     description:
-      path: "lib/crm_admin_app"
+      path: "lib/CRM/CRM-ADMIN-APP"
       relative: true
     source: path
     version: "1.0.0+1"

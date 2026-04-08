@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:hrm/views/home/settings.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:hrm/views/widgets/user_avatar.dart';
+import '../../models/employee_api.dart';
+import 'package:flutter/foundation.dart';
 
 class AccountSettingsApp extends StatelessWidget {
   const AccountSettingsApp({super.key});
@@ -27,6 +29,7 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
   String mobile = "";
   String address = "";
   String profilePhoto = "";
+  bool isLoading = true;
 
   @override
   void initState() {
@@ -41,7 +44,44 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
       mobile = prefs.getString('mobile') ?? "";
       address = prefs.getString('address') ?? "Not Mentioned";
       profilePhoto = prefs.getString('profile_photo') ?? "";
+      isLoading = false;
     });
+
+    try {
+      final String uid = prefs.getString('uid') ?? 
+                        prefs.getString('login_cus_id') ?? 
+                        prefs.getString('employee_table_id') ?? "1";
+      final String cid = prefs.getString('cid') ?? prefs.getString('cid_str') ?? "21472147";
+      final String token = prefs.getString('token') ?? "";
+      final String deviceId = prefs.getString('device_id') ?? "123456";
+
+      final response = await EmployeeApi.getEmployeeDetails(
+        uid: uid,
+        cid: cid,
+        deviceId: deviceId,
+        lat: prefs.getDouble('lat')?.toString() ?? "145",
+        lng: prefs.getDouble('lng')?.toString() ?? "145",
+        token: token,
+      );
+
+      if (response["error"] == false || response["error"] == "false") {
+        final profileData = response["data"] ?? {};
+        if (mounted) {
+          setState(() {
+            name = profileData["name"]?.toString() ?? name;
+            mobile = profileData["contact_number"]?.toString() ?? profileData["mobile"]?.toString() ?? mobile;
+            address = profileData["address"]?.toString() ?? profileData["communication_address"]?.toString() ?? address;
+            profilePhoto = profileData["profile_photo"]?.toString() ?? profilePhoto;
+          });
+        }
+        await prefs.setString('name', name);
+        await prefs.setString('mobile', mobile);
+        await prefs.setString('address', address);
+        await prefs.setString('profile_photo', profilePhoto);
+      }
+    } catch (e) {
+      debugPrint("Account Settings Sync Error => $e");
+    }
   }
 
   @override

@@ -1,6 +1,6 @@
 import 'package:crm/Services/notification_service.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:crm/Screens/SignIn/splash.dart';
+import 'package:crm/Screens/Home/dashboard_screen.dart';
 import 'package:crm/Screens/providers/theme_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -10,9 +10,9 @@ import 'firebase_options.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-await Firebase.initializeApp(
-  options: DefaultFirebaseOptions.currentPlatform,
-);
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
   // Initialize Push Notifications
   await NotificationService.initialize();
   FirebaseMessaging.onBackgroundMessage(
@@ -22,7 +22,6 @@ await Firebase.initializeApp(
   runApp(
     MultiProvider(
       providers: [ChangeNotifierProvider(create: (_) => ThemeProvider())],
-
       child: const MyApp(),
     ),
   );
@@ -87,7 +86,7 @@ class MyApp extends StatelessWidget {
               subtitleTextStyle: TextStyle(color: Colors.white70),
             ),
           ),
-          home: const SplashScreen(),
+          home: const DashboardScreen(),
         );
       },
     );

@@ -128,14 +128,10 @@ class _MobileLoginScreenState extends State<MobileLoginScreen> {
           print("   Device ID  : ${deviceData['device_id'] ?? 'Unknown'}");
           print("   Latitude   : ${deviceData['lt'] ?? '0.0'}");
           print("   Longitude  : ${deviceData['ln'] ?? '0.0'}");
-          print(
-            "=============================================================",
-          );
-
-          final String otp = data['otp']?.toString() ?? '';
+          print("=============================================================");
 
           if (mounted) {
-            _showOTPBottomSheet(mobile, otp);
+            _showOTPBottomSheet(mobile);
           }
         } else {
           if (mounted) {
@@ -153,9 +149,9 @@ class _MobileLoginScreenState extends State<MobileLoginScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text("Error: ${e.toString()}")));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error: ${e.toString()}")),
+        );
       }
       print("❌ Login error: $e");
     } finally {
@@ -167,7 +163,7 @@ class _MobileLoginScreenState extends State<MobileLoginScreen> {
     }
   }
 
-  void _showOTPBottomSheet(String mobile, String initialOtp) {
+  void _showOTPBottomSheet(String mobile) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -178,7 +174,6 @@ class _MobileLoginScreenState extends State<MobileLoginScreen> {
         ),
         child: MobileverifyOTP(
           phoneNumber: mobile,
-          initialOtp: initialOtp.isNotEmpty ? initialOtp : null,
           onVerify: () {
             debugPrint("Sign-In: onVerify callback triggered");
             Navigator.pop(context); // Close bottom sheet

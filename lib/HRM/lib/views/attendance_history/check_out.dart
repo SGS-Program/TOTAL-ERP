@@ -12,7 +12,6 @@ import 'package:device_info_plus/device_info_plus.dart';
 import 'dart:convert';
 import '../../services/face_detector_service.dart';
 import 'package:hrm/models/attendance_api.dart';
-import 'package:hrm/views/login_section/login_screen.dart';
 
 class CheckOutVerificationScreen extends StatefulWidget {
   const CheckOutVerificationScreen({super.key});
@@ -217,7 +216,7 @@ class _CheckOutVerificationScreenState
             prefs.getString('login_cus_id') ??
             prefs.getString('server_uid') ??
             prefs.getString('employee_table_id') ??
-            prefs.getInt('uid')?.toString() ??
+            prefs.get('uid')?.toString() ??
             "";
         cid = prefs.getString('cid') ?? "";
         serverUidString = prefs.getString('server_uid');

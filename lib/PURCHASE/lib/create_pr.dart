@@ -843,11 +843,11 @@ class _CreatePurchaseRequestScreenState
               padding: EdgeInsets.all(12),
               child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
             ),
-            errorBuilder: (context, error) => Padding(
-              padding: const EdgeInsets.all(8),
+            emptyBuilder: (context) => const Padding(
+              padding: EdgeInsets.all(12),
               child: Text(
-                "Error: $error",
-                style: const TextStyle(color: Colors.red, fontSize: 12),
+                "Search for Items...",
+                style: TextStyle(fontSize: 13, color: Colors.grey),
               ),
             ),
             builder: (context, controller, focusNode) {
@@ -979,7 +979,7 @@ class _CreatePurchaseRequestScreenState
             emptyBuilder: (context) => const Padding(
               padding: EdgeInsets.all(12),
               child: Text(
-                "No matching items found",
+                "Search for Items...",
                 style: TextStyle(fontSize: 13, color: Colors.grey),
               ),
             ),

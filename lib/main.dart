@@ -2,13 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:provider/provider.dart';
-import 'TOTAL ERP/splash/splash_screen.dart';
+import 'TOTAL_ERP/splash/splash_screen.dart';
 import 'package:crm/providers/theme_provider.dart';
 import 'firebase_options.dart';
 
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'l10n/app_localizations.dart';
+import 'package:hrm/services/device_service.dart';
 
 // Top-level ValueNotifier available throughout the application
 final ValueNotifier<ThemeMode> themeNotifier = ValueNotifier(ThemeMode.light);
@@ -17,6 +18,13 @@ final ValueNotifier<Locale> localeNotifier = ValueNotifier(const Locale('en'));
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  
+  // Initialize device ID and location for all modules
+  try {
+    await DeviceService.initDeviceInfo();
+  } catch (e) {
+    debugPrint("Global Device Init Error: $e");
+  }
   runApp(
     MultiProvider(
       providers: [ChangeNotifierProvider(create: (_) => ThemeProvider())],

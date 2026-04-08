@@ -141,10 +141,10 @@ class _DashboardState extends State<Dashboard> {
     try {
       final String sessionUid =
           prefs.getString('login_cus_id') ??
-          prefs.getString('server_uid') ??
-          prefs.getString('employee_table_id') ??
-          prefs.getInt('uid')?.toString() ??
-          "84";
+          prefs.get('uid')?.toString() ??
+          "54";
+      
+      final String cid = prefs.getString('cid') ?? prefs.getString('cid_str') ?? "21472147";
 
       final String lat = prefs.getDouble('lat')?.toString() ?? "145";
       final String lng = prefs.getDouble('lng')?.toString() ?? "145";
@@ -152,7 +152,7 @@ class _DashboardState extends State<Dashboard> {
 
       final body = {
         "type": "2048",
-        "cid": prefs.getString('cid') ?? "21472147",
+        "cid": cid,
         "uid": sessionUid,
         "id": sessionUid,
         "device_id": deviceId,
@@ -165,18 +165,21 @@ class _DashboardState extends State<Dashboard> {
         Uri.parse("https://erpsmart.in/total/api/m_api/"),
         body: body,
       );
+      
+      debugPrint("Employee Details API Response (2048) => ${response.body}");
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
+        final profileData = data["data"] ?? {};
         if (data["error"] == false || data["error"] == "false") {
           if (mounted) {
             setState(() {
-              userName = data["name"] ?? prefs.getString('name') ?? "User";
+              userName = profileData["name"]?.toString() ?? prefs.getString('name') ?? "User";
             });
           }
           await prefs.setString('name', userName);
-          await prefs.setString('employee_code', data["employee_code"] ?? "");
-          await prefs.setString('profile_photo', data["profile_photo"] ?? "");
+          await prefs.setString('employee_code', profileData["employee_code"]?.toString() ?? "");
+          await prefs.setString('profile_photo', profileData["profile_photo"]?.toString() ?? "");
         }
       }
     } catch (e) {
@@ -194,24 +197,22 @@ class _DashboardState extends State<Dashboard> {
   Future<void> _fetchLeaveSummary(SharedPreferences prefs) async {
     try {
       final String uid =
-          prefs.getString('login_cus_id') ??
-          prefs.getString('server_uid') ??
-          prefs.getString('employee_table_id') ??
-          prefs.getInt('uid')?.toString() ??
-          "1";
+          prefs.get('uid')?.toString() ??
+          "54";
       final lat = prefs.getDouble('lat')?.toString() ?? "145";
       final lng = prefs.getDouble('lng')?.toString() ?? "145";
 
       final response = await http.post(
         Uri.parse("https://erpsmart.in/total/api/m_api/"),
         body: {
-          "cid": prefs.getString('cid') ?? "",
+          "cid": prefs.getString('cid') ?? prefs.getString('cid_str') ?? "21472147",
           "device_id": prefs.getString('device_id') ?? "",
           "lt": lat,
           "ln": lng,
           "type": "2051",
           "uid": uid.toString(),
           "id": uid.toString(),
+          if (prefs.getString('token') != null) "token": prefs.getString('token'),
         },
       );
 
@@ -284,11 +285,9 @@ class _DashboardState extends State<Dashboard> {
     try {
       final prefs = await SharedPreferences.getInstance();
       final String uid =
-          prefs.getString('login_cus_id') ??
-          prefs.getString('server_uid') ??
-          prefs.getString('employee_table_id') ??
-          prefs.getInt('uid')?.toString() ??
-          "2";
+          prefs.get('uid')?.toString() ??
+          "54";
+      final String token = prefs.getString('token') ?? "";
       final String empCode = prefs.getString('employee_code') ?? "";
       final String lt = prefs.getDouble('lat')?.toString() ?? "145";
       final String ln = prefs.getDouble('lng')?.toString() ?? "145";
@@ -296,13 +295,14 @@ class _DashboardState extends State<Dashboard> {
       final response = await http.post(
         Uri.parse("https://erpsmart.in/total/api/m_api/"),
         body: {
-          "cid": prefs.getString('cid') ?? "",
+          "cid": prefs.getString('cid') ?? prefs.getString('cid_str') ?? "21472147",
           "device_id": prefs.getString('device_id') ?? "123456",
           "lt": lt,
           "ln": ln,
           "type": "2052",
           "uid": uid.toString(),
           "id": uid.toString(),
+          "token": token,
         },
       );
 
@@ -414,16 +414,15 @@ class _DashboardState extends State<Dashboard> {
 
   Future<void> _fetchMonthlyPerformance(SharedPreferences prefs) async {
     try {
-      final String cid = prefs.getString('cid') ?? "";
+      final String cid = prefs.getString('cid') ?? prefs.getString('cid_str') ?? "21472147";
       final String uid =
+          prefs.getString('uid') ??
           prefs.getString('login_cus_id') ??
-          prefs.getString('server_uid') ??
-          prefs.getString('employee_table_id') ??
-          prefs.getInt('uid')?.toString() ??
-          "0";
-      final String deviceId = prefs.getString('device_id') ?? "";
-      final String lat = prefs.getDouble('lat')?.toString() ?? "";
-      final String lng = prefs.getDouble('lng')?.toString() ?? "";
+          prefs.get('uid')?.toString() ??
+          "54";
+      final String deviceId = prefs.getString('device_id') ?? "123456";
+      final String lat = prefs.getDouble('lat')?.toString() ?? "145";
+      final String lng = prefs.getDouble('lng')?.toString() ?? "145";
       final String? token = prefs.getString('token');
 
       DateTime now = DateTime.now();
@@ -466,13 +465,10 @@ class _DashboardState extends State<Dashboard> {
 
   Future<void> _fetchCheckInStatus(SharedPreferences prefs) async {
     try {
-      final String cid = prefs.getString('cid') ?? "";
+      final String cid = prefs.getString('cid') ?? prefs.getString('cid_str') ?? "21472147";
       final String uid =
-          prefs.getString('login_cus_id') ??
-          prefs.getString('server_uid') ??
-          prefs.getString('employee_table_id') ??
-          prefs.getInt('uid')?.toString() ??
-          "0";
+          prefs.get('uid')?.toString() ??
+          "54";
       final String token = prefs.getString('token') ?? "";
       final String lat = prefs.getDouble('lat')?.toString() ?? "";
       final String lng = prefs.getDouble('lng')?.toString() ?? "";
@@ -586,7 +582,7 @@ class _DashboardState extends State<Dashboard> {
                     Uri.parse("https://erpsmart.in/total/api/m_api/"),
                     body: {
                       "type": "2062",
-                      "cid": cid,
+                      "cid": prefs.getString('cid') ?? prefs.getString('cid_str') ?? "21472147",
                       "uid": uid,
                       "device_id": dId,
                       "lt": lat,

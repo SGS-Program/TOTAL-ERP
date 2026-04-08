@@ -48,14 +48,12 @@ dependencies:
     path: lib/PURCHASE
   hrm:
     path: lib/hrm
-  # hrm_admin_app:
-  #   path: lib/hrm/hrm_admin_app
   sales:
     path: lib/SALES
   sale_management:
     path: lib/sale_management
   crm_admin_app:
-    path: lib/crm_admin_app
+    path: lib/CRM/CRM-ADMIN-APP
   geolocator: ^14.0.2
   device_info_plus: ^12.3.0
   battery_plus: ^7.0.0

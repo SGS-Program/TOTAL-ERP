@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'package:crm/Screens/SignIn/splash.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:crm/Services/preference_service.dart';
@@ -10,9 +10,10 @@ class ProfileService {
   static Future<Map<String, dynamic>?> fetchProfileData() async {
     try {
       final String? ledId = await PreferenceService.getLedId();
-      final String deviceId = SplashScreen.deviceId ?? '';
-      final String lt = SplashScreen.lt ?? '';
-      final String ln = SplashScreen.ln ?? '';
+      final prefs = await SharedPreferences.getInstance();
+      final String deviceId = prefs.getString('device_id') ?? '';
+      final String lt = prefs.getString('lt') ?? '';
+      final String ln = prefs.getString('ln') ?? '';
 
       if (ledId == null || ledId.isEmpty) {
         debugPrint(
@@ -72,9 +73,10 @@ class ProfileService {
   }) async {
     try {
       final String? ledId = await PreferenceService.getLedId();
-      final String deviceId = SplashScreen.deviceId ?? '';
-      final String lt = SplashScreen.lt ?? '';
-      final String ln = SplashScreen.ln ?? '';
+      final prefs = await SharedPreferences.getInstance();
+      final String deviceId = prefs.getString('device_id') ?? '';
+      final String lt = prefs.getString('lt') ?? '';
+      final String ln = prefs.getString('ln') ?? '';
 
       if (ledId == null || ledId.isEmpty) {
         debugPrint(

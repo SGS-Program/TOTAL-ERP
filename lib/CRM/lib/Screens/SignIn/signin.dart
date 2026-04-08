@@ -6,8 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/gestures.dart';
 import 'package:crm/Services/preference_service.dart';
+import 'package:crm/Models/login_api.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../../Models/login_api.dart';
 
 enum LoginMethod { mobile, whatsapp, mail, sms }
 
@@ -39,63 +39,49 @@ class _SignInScreenState extends State<SignInScreen> {
       return;
     }
 
-    if (_selectedMethod != LoginMethod.mail &&
-        _inputController.text.length != 10) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a valid 10-digit number')),
-      );
-      return;
-    }
-
     setState(() {
       _isLoading = true;
     });
 
     try {
-      String inputValue = _inputController.text.trim();
+      final String inputValue = _inputController.text.trim();
+      final responseData = await LoginApi.signIn(mobile: inputValue);
+      final prefs = await SharedPreferences.getInstance();
 
-      final responseData = await LoginApi.signIn(
-        mobile: inputValue,
+      await PreferenceService.setToken(
+        responseData['token']?.toString() ?? 'local-login-token',
+      );
+      await PreferenceService.setLedId(
+        responseData['led_id']?.toString() ?? 'local-led-id',
+      );
+      await PreferenceService.setCusId(
+        responseData['cus_id']?.toString() ?? 'local-cus-id',
+      );
+      await PreferenceService.setCid(
+        responseData['cid']?.toString() ?? '21472147',
       );
 
-      debugPrint("------------ SIGN IN API RESPONSE ------------");
-      debugPrint("BODY: $responseData");
-
-      bool error = responseData['error'] ?? true;
-      String message = responseData['error_msg'] ?? 'Something went wrong';
-
-      if (!error) {
-        // Store token, cus_id, cid, and comp_name from 3001 response
-        if (responseData['token'] != null) {
-          await PreferenceService.setToken(
-            responseData['token']?.toString() ?? '',
-          );
-        }
-        if (responseData['cus_id'] != null) {
-          await PreferenceService.setCusId(
-            responseData['cus_id']?.toString() ?? '',
-          );
-        }
-        if (responseData['cid'] != null) {
-          await PreferenceService.setCid(responseData['cid'].toString());
-        }
-        if (responseData['comp_name'] != null) {
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.setString(
-            'com_name',
-            responseData['comp_name'].toString(),
-          );
-        }
-
-        if (mounted) {
-          _showOTPDialog();
-        }
+      if (_selectedMethod == LoginMethod.mail) {
+        await PreferenceService.setEmail(inputValue);
+        await PreferenceService.setUname(inputValue);
       } else {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(message), backgroundColor: Colors.red),
-          );
-        }
+        await PreferenceService.setMobile(inputValue);
+      }
+
+      await PreferenceService.setName(
+        responseData['name']?.toString() ?? 'CRM User',
+      );
+      await prefs.setString(
+        'com_name',
+        responseData['comp_name']?.toString() ?? 'CRM',
+      );
+
+      if (mounted) {
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (context) => const DashboardScreen()),
+          (route) => false,
+        );
       }
     } catch (e) {
       debugPrint("Sign in error: $e");

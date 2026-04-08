@@ -1,43 +1,37 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_screenutil/flutter_screenutil.dart';
-import 'package:google_fonts/google_fonts.dart';
-import 'Screens/HomeScreen/dashboard.dart';
+import 'package:flutter/services.dart';
+import '../widgets/app_theme.dart';
+import '../Sales_Module/sale_dashboard.dart';
 
+// ─── ENTRY POINT ──────────────────────────────────────────────────────────────
 void main() {
-  runApp(const MyApp());
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Status bar teal color on launch
+  SystemChrome.setSystemUIOverlayStyle(AppTheme.statusBarTeal);
+
+  // Lock to portrait
+  SystemChrome.setPreferredOrientations([
+    DeviceOrientation.portraitUp,
+    DeviceOrientation.portraitDown,
+  ]);
+
+  runApp(const SalesApp());
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+// ─── ROOT APP ─────────────────────────────────────────────────────────────────
+class SalesApp extends StatelessWidget {
+  const SalesApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return ScreenUtilInit(
-      designSize: const Size(360, 690),
-      minTextAdapt: true,
-      splitScreenMode: true,
-      builder: (context, child) {
-        return MaterialApp(
-          debugShowCheckedModeBanner: false,
-          title: 'Sales ERP',
-          theme: ThemeData(
-            colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF26A69A)),
-            useMaterial3: true,
-            textTheme: GoogleFonts.poppinsTextTheme(),
-            appBarTheme: const AppBarTheme(
-              backgroundColor: Color(0xFF26A69A),
-              foregroundColor: Colors.white,
-              elevation: 0,
-            ),
-            bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-              selectedItemColor: Color(0xFF26A69A),
-              unselectedItemColor: Colors.grey,
-              backgroundColor: Colors.white,
-            ),
-          ),
-          home: const SalesDashboard(),
-        );
-      },
+    return MaterialApp(
+      title: 'SalesFlow ERP',
+      debugShowCheckedModeBanner: false,
+      theme: AppTheme.light,
+      // DashboardPage is the home — it carries its own
+      // Scaffold (with Drawer + BottomNavBar) inside.
+      home: const DashboardPage(),
     );
   }
 }

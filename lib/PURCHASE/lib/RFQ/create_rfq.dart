@@ -1,4 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
+import 'package:flutter_typeahead/flutter_typeahead.dart';
+import 'package:purchase_erp/utils/device_services.dart';
 
 class CreateRFQScreen extends StatefulWidget {
   const CreateRFQScreen({super.key});
@@ -16,10 +21,143 @@ class _CreateRFQScreenState extends State<CreateRFQScreen> {
       "qty": TextEditingController(),
       "remarks": TextEditingController(),
       "selectedSuppliers": <String>[],
-    }
+    },
   ];
 
-  final List<String> allSuppliers = ["CMS Soft", "RK Traders", "SMM", "SMV"];
+  List<String> allSuppliers = [];
+  bool isLoadingSuppliers = true;
+  String? supplierError;
+
+  String? cid;
+  String? deviceId;
+  String? lt;
+  String? ln;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadInitialData();
+  }
+
+  Future<void> _loadInitialData() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      setState(() {
+        cid = prefs.getString('cid') ?? '';
+        deviceId = prefs.getString('device_id') ?? '123';
+        lt = prefs.getString('lt') ?? '123';
+        ln = prefs.getString('ln') ?? '987';
+      });
+
+      // Get updated device info in background
+      DeviceServices.getAndStoreDeviceInfo().then((deviceData) {
+        if (mounted) {
+          setState(() {
+            deviceId = deviceData['device_id'] ?? deviceId;
+            lt = deviceData['lt'] ?? lt;
+            ln = deviceData['ln'] ?? ln;
+          });
+        }
+      });
+
+      _fetchSuppliers();
+    } catch (e) {
+      debugPrint("Error loading initial data: $e");
+    }
+  }
+
+  Future<void> _fetchSuppliers() async {
+    setState(() {
+      isLoadingSuppliers = true;
+      supplierError = null;
+    });
+
+    try {
+      if (cid == null || cid!.isEmpty) {
+        final prefs = await SharedPreferences.getInstance();
+        cid = prefs.getString('cid');
+      }
+
+      if (cid == null || cid!.isEmpty) {
+        throw Exception("CID not found in SharedPreferences");
+      }
+
+      final response = await http.post(
+        Uri.parse('https://erpsmart.in/total/api/m_api/'),
+        body: {
+          'type': '4014',
+          'cid': cid ?? '',
+          'device_id': deviceId ?? '123',
+          'lt': lt ?? '123',
+          'ln': ln ?? '987',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> jsonData = json.decode(response.body);
+
+        if (jsonData['error'] == false && jsonData['data'] != null) {
+          final List<dynamic> supplierList = jsonData['data'];
+
+          setState(() {
+            allSuppliers = supplierList
+                .map<String>((item) => item['name'].toString())
+                .toList();
+            isLoadingSuppliers = false;
+          });
+        } else {
+          throw Exception("API returned error or empty data");
+        }
+      } else {
+        throw Exception("Failed to load suppliers: ${response.statusCode}");
+      }
+    } catch (e) {
+      setState(() {
+        supplierError = "Failed to load suppliers: ${e.toString()}";
+        isLoadingSuppliers = false;
+        // Fallback to your previous hardcoded list in case of error
+        allSuppliers = ["CMS Soft", "RK Traders", "SMM", "SMV"];
+      });
+      debugPrint("Supplier fetch error: $e");
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> _searchItems(String query) async {
+    if (query.trim().isEmpty) return [];
+    if (cid == null || cid!.isEmpty) {
+      debugPrint("⚠️ Cannot search: cid is missing");
+      return [];
+    }
+
+    try {
+      debugPrint("🔍 Searching for: '$query' (cid: $cid)");
+      final response = await http.post(
+        Uri.parse("https://erpsmart.in/total/api/m_api/"),
+        body: {
+          "type": "4003",
+          "cid": cid ?? '',
+          "device_id": deviceId ?? '123',
+          "lt": lt ?? '123',
+          "ln": ln ?? '987',
+          "search": query.trim(),
+        },
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['error'] == false && data['data'] != null) {
+          return List<Map<String, dynamic>>.from(data['data']);
+        } else {
+          debugPrint("⚠️ Item Search API returned error or no data");
+        }
+      } else {
+        debugPrint("❌ Item Search API Fail: Status ${response.statusCode}");
+      }
+    } catch (e) {
+      debugPrint("❌ Search Exception: $e");
+    }
+    return [];
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -37,7 +175,11 @@ class _CreateRFQScreenState extends State<CreateRFQScreen> {
         ),
         title: const Text(
           "Create RFQ",
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+            fontSize: 18,
+          ),
         ),
       ),
       body: SingleChildScrollView(
@@ -126,14 +268,17 @@ class _CreateRFQScreenState extends State<CreateRFQScreen> {
                   const Text(
                     "Items",
                     style: TextStyle(
-                      color: Color(0xff512DA8), // Purple color
+                      color: Color(0xff512DA8),
                       fontWeight: FontWeight.bold,
                       fontSize: 18,
                     ),
                   ),
                   const SizedBox(height: 16),
                   Column(
-                    children: List.generate(items.length, (index) => buildItemCard(index)),
+                    children: List.generate(
+                      items.length,
+                      (index) => buildItemCard(index),
+                    ),
                   ),
                   const SizedBox(height: 12),
                   Align(
@@ -152,7 +297,10 @@ class _CreateRFQScreenState extends State<CreateRFQScreen> {
                         });
                       },
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
                         decoration: BoxDecoration(
                           color: const Color(0xff26A69A),
                           borderRadius: BorderRadius.circular(20),
@@ -164,7 +312,10 @@ class _CreateRFQScreenState extends State<CreateRFQScreen> {
                             SizedBox(width: 4),
                             Text(
                               "Add",
-                              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                           ],
                         ),
@@ -200,7 +351,7 @@ class _CreateRFQScreenState extends State<CreateRFQScreen> {
                 ),
               ),
             ),
-             const SizedBox(height: 20),
+            const SizedBox(height: 20),
           ],
         ),
       ),
@@ -233,11 +384,13 @@ class _CreateRFQScreenState extends State<CreateRFQScreen> {
               child: ElevatedButton(
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xff26A69A),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
                 ),
                 onPressed: () {
-                  Navigator.pop(context); // Close dialog
-                  Navigator.pop(context); // Go back from Create RFQ
+                  Navigator.pop(context);
+                  Navigator.pop(context);
                 },
                 child: const Text("OK", style: TextStyle(color: Colors.white)),
               ),
@@ -265,7 +418,10 @@ class _CreateRFQScreenState extends State<CreateRFQScreen> {
             children: [
               Text(
                 "Item ${index + 1}",
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                ),
               ),
               if (items.length > 1)
                 IconButton(
@@ -280,10 +436,70 @@ class _CreateRFQScreenState extends State<CreateRFQScreen> {
           ),
           const SizedBox(height: 12),
           buildLabel("Item Code"),
-          buildSmallTextField("Enter Item Code", items[index]["code"]),
+          TypeAheadField<Map<String, dynamic>>(
+            controller: items[index]["code"],
+            suggestionsCallback: _searchItems,
+            debounceDuration: const Duration(milliseconds: 300),
+            emptyBuilder: (context) => const Padding(
+              padding: EdgeInsets.all(12),
+              child: Text(
+                "Search for Items...",
+                style: TextStyle(fontSize: 13, color: Colors.grey),
+              ),
+            ),
+            builder: (context, controller, focusNode) {
+              return buildSmallTextField("Enter Item Code", controller,
+                  focusNode: focusNode);
+            },
+            itemBuilder: (context, suggestion) {
+              String name = suggestion['Item name'] ?? 'Unknown';
+              String code = suggestion['Item Code'] ?? 'N/A';
+              return ListTile(
+                title: Text(code, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                subtitle: Text(name, style: const TextStyle(fontSize: 12)),
+              );
+            },
+            onSelected: (suggestion) {
+              setState(() {
+                items[index]["code"].text = suggestion['Item Code']?.toString() ?? '';
+                items[index]["name"].text = suggestion['Item name']?.toString() ?? '';
+                items[index]["uom"].text = suggestion['UOM']?.toString() ?? '';
+              });
+            },
+          ),
           const SizedBox(height: 12),
           buildLabel("Product Name"),
-          buildSmallTextField("QC Test Result", items[index]["name"]),
+          TypeAheadField<Map<String, dynamic>>(
+            controller: items[index]["name"],
+            suggestionsCallback: _searchItems,
+            debounceDuration: const Duration(milliseconds: 300),
+            emptyBuilder: (context) => const Padding(
+              padding: EdgeInsets.all(12),
+              child: Text(
+                "Search for Items...",
+                style: TextStyle(fontSize: 13, color: Colors.grey),
+              ),
+            ),
+            builder: (context, controller, focusNode) {
+              return buildSmallTextField("Product Name", controller,
+                  focusNode: focusNode);
+            },
+            itemBuilder: (context, suggestion) {
+              String name = suggestion['Item name'] ?? 'Unknown';
+              String code = suggestion['Item Code'] ?? 'N/A';
+              return ListTile(
+                title: Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                subtitle: Text("Code: $code", style: const TextStyle(fontSize: 11)),
+              );
+            },
+            onSelected: (suggestion) {
+              setState(() {
+                items[index]["code"].text = suggestion['Item Code']?.toString() ?? '';
+                items[index]["name"].text = suggestion['Item name']?.toString() ?? '';
+                items[index]["uom"].text = suggestion['UOM']?.toString() ?? '';
+              });
+            },
+          ),
           const SizedBox(height: 12),
           buildLabel("UOM"),
           buildSmallTextField("UOM", items[index]["uom"]),
@@ -295,7 +511,21 @@ class _CreateRFQScreenState extends State<CreateRFQScreen> {
           buildSmallTextField("Remarks", items[index]["remarks"]),
           const SizedBox(height: 12),
           buildLabel("Supplier"),
-          buildSupplierDropdown(index),
+          if (isLoadingSuppliers)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else if (supplierError != null)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Text(
+                supplierError!,
+                style: const TextStyle(color: Colors.red, fontSize: 13),
+              ),
+            )
+          else
+            buildSupplierDropdown(index),
         ],
       ),
     );
@@ -317,26 +547,50 @@ class _CreateRFQScreenState extends State<CreateRFQScreen> {
       decoration: InputDecoration(
         hintText: hint,
         hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
-        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
-        focusedBorder: const OutlineInputBorder(borderSide: BorderSide(color: Color(0xff26A69A))),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 12,
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(color: Colors.grey.shade300),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(color: Colors.grey.shade300),
+        ),
+        focusedBorder: const OutlineInputBorder(
+          borderSide: BorderSide(color: Color(0xff26A69A)),
+        ),
         filled: true,
         fillColor: Colors.white,
       ),
     );
   }
 
-  Widget buildSmallTextField(String hint, TextEditingController controller) {
+  Widget buildSmallTextField(String hint, TextEditingController controller,
+      {FocusNode? focusNode}) {
     return TextField(
       controller: controller,
+      focusNode: focusNode,
       decoration: InputDecoration(
         hintText: hint,
         hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide(color: Colors.grey.shade300)),
-        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide(color: Colors.grey.shade300)),
-        focusedBorder: const OutlineInputBorder(borderSide: BorderSide(color: Color(0xff26A69A))),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 10,
+          vertical: 10,
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(6),
+          borderSide: BorderSide(color: Colors.grey.shade300),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(6),
+          borderSide: BorderSide(color: Colors.grey.shade300),
+        ),
+        focusedBorder: const OutlineInputBorder(
+          borderSide: BorderSide(color: Color(0xff26A69A)),
+        ),
       ),
     );
   }
@@ -357,27 +611,43 @@ class _CreateRFQScreenState extends State<CreateRFQScreen> {
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 4),
               child: selected.isEmpty
-                  ? const Text("Supplier", style: TextStyle(color: Colors.grey, fontSize: 13))
+                  ? const Text(
+                      "Supplier",
+                      style: TextStyle(color: Colors.grey, fontSize: 13),
+                    )
                   : Wrap(
                       spacing: 8,
-                      children: selected.map((s) => Chip(
-                        label: Text(s, style: const TextStyle(fontSize: 12)),
-                        deleteIcon: const Icon(Icons.close, size: 14, color: Colors.red),
-                        onDeleted: () {
-                          setState(() {
-                            selected.remove(s);
-                          });
-                        },
-                        visualDensity: VisualDensity.compact,
-                        backgroundColor: Colors.grey.shade200,
-                      )).toList(),
+                      children: selected
+                          .map(
+                            (s) => Chip(
+                              label: Text(
+                                s,
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                              deleteIcon: const Icon(
+                                Icons.close,
+                                size: 14,
+                                color: Colors.red,
+                              ),
+                              onDeleted: () {
+                                setState(() {
+                                  selected.remove(s);
+                                });
+                              },
+                              visualDensity: VisualDensity.compact,
+                              backgroundColor: Colors.grey.shade200,
+                            ),
+                          )
+                          .toList(),
                     ),
             ),
           ),
           DropdownButton<String>(
             underline: const SizedBox(),
             icon: const Icon(Icons.keyboard_arrow_down, color: Colors.black),
-            items: allSuppliers.where((s) => !selected.contains(s)).map((String s) {
+            items: allSuppliers.where((s) => !selected.contains(s)).map((
+              String s,
+            ) {
               return DropdownMenuItem<String>(
                 value: s,
                 child: Text(s, style: const TextStyle(fontSize: 13)),

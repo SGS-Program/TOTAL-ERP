@@ -1,8 +1,7 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:hrm/views/login_section/login_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'main_root.dart';
@@ -64,9 +63,10 @@ class _SplashScreenState extends State<SplashScreen> {
         );
       }
     } else {
+      // ✅ No local login anymore. Always go to MainRoot as the host app handles auth.
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (_) => const LoginScreen()),
+        MaterialPageRoute(builder: (_) => const MainRoot()),
       );
     }
   }

@@ -3,8 +3,6 @@ import 'package:crm/Screens/Settings/notification_alert_screen.dart';
 import 'package:crm/Screens/Settings/help_support_screen.dart';
 import 'package:crm/Screens/Settings/security_settings_screen.dart';
 import 'package:crm/Screens/Settings/app_preference_screen.dart';
-import 'package:crm/Screens/SignIn/signin.dart';
-import 'package:crm/Screens/SignIn/splash.dart';
 import 'package:crm/Services/profile_service.dart';
 import 'package:crm/Services/preference_service.dart';
 import 'package:flutter/material.dart';
@@ -56,9 +54,9 @@ class _SettingScreenState extends State<SettingScreen> {
           _mobile = profileData['mobile'] ?? _mobile;
         }
 
-        // Get coordinates
-        String lt = SplashScreen.lt ?? prefs.getString('lt') ?? '';
-        String ln = SplashScreen.ln ?? prefs.getString('ln') ?? '';
+        // Get coordinates from PreferenceService
+        String lt = prefs.getString('lt') ?? '';
+        String ln = prefs.getString('ln') ?? '';
 
         if (lt.isNotEmpty && ln.isNotEmpty) {
           _reverseGeocode(lt, ln);
@@ -383,10 +381,9 @@ class _SettingScreenState extends State<SettingScreen> {
                             final prefs = await SharedPreferences.getInstance();
                             final String ledId =
                                 prefs.getString('led_id') ?? '';
-                            final String deviceId =
-                                SplashScreen.deviceId ?? '12345';
-                            final String lt = SplashScreen.lt ?? '145';
-                            final String ln = SplashScreen.ln ?? '145';
+                            final String deviceId = prefs.getString('device_id') ?? '12345';
+                            final String lt = prefs.getString('lt') ?? '145';
+                            final String ln = prefs.getString('ln') ?? '145';
 
                             try {
                               const String apiUrl =
@@ -433,17 +430,12 @@ class _SettingScreenState extends State<SettingScreen> {
                               debugPrint("Logout API error: $e");
                             }
 
-                            await prefs.clear(); // Clear all local session data
+                             await prefs.clear(); // Clear all local session data
 
-                            if (context.mounted) {
-                              Navigator.pushAndRemoveUntil(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => const SignInScreen(),
-                                ),
-                                (route) => false,
-                              );
-                            }
+                             if (context.mounted) {
+                               // Pop all way to roothost app login
+                               Navigator.of(context, rootNavigator: true).popUntil((route) => route.isFirst);
+                             }
                           },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFF23315D),

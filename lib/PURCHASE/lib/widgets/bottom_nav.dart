@@ -45,19 +45,9 @@ class CustomBottomNavBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       height: 65,
-      decoration: BoxDecoration(
+      decoration: const BoxDecoration(
         color: Colors.white,
-        borderRadius: const BorderRadius.only(
-          topLeft: Radius.circular(20),
-          topRight: Radius.circular(20),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.08),
-            blurRadius: 10,
-            offset: const Offset(0, -2),
-          ),
-        ],
+        border: Border(top: BorderSide(color: Colors.black12, width: 1.0)),
       ),
       child: SafeArea(
         child: Row(
@@ -82,7 +72,7 @@ class CustomBottomNavBar extends StatelessWidget {
 
   Widget navItem(BuildContext context, IconData icon, String label, int index) {
     final isSelected = selectedIndex == index;
-    final color = isSelected ? const Color(0xFF26A69A) : Colors.grey.shade400;
+    final color = isSelected ? const Color(0xFF26A69A) : Colors.grey;
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,

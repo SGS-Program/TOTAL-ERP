@@ -1,24 +1,32 @@
 import 'package:flutter/material.dart';
+import 'package:purchase_erp/purchase_orders/create_purchase_order.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:fl_chart/fl_chart.dart';
-import 'package:google_fonts/google_fonts.dart';
-import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:purchase_erp/Request%20Approvals/approvals.dart';
 import 'package:purchase_erp/Supplier%20Quotations/quotation_comparison.dart';
 import 'package:purchase_erp/widgets/bottom_nav.dart';
 import 'package:purchase_erp/create_pr.dart';
 import 'package:purchase_erp/purchase_orders/purchase_orders.dart';
 import 'package:purchase_erp/notification.dart';
+import 'package:purchase_erp/Profile/profile.dart';
 import 'package:purchase_erp/RFQ/request_for_quotation.dart';
 import 'package:purchase_erp/Reports/reports_analytics.dart';
 import 'package:purchase_erp/GRN/grn_screen.dart';
 import 'package:purchase_erp/Supplier%20Quotations/supplier_quotations.dart';
+import 'package:purchase_erp/Profile/settings.dart';
+import 'package:purchase_erp/Profile/privacy_policy.dart';
+import 'package:purchase_erp/Login%20Section/Sign-In.dart';
 import 'package:purchase_erp/QC/qc_inspections_screen.dart';
-import 'package:purchase_erp/widgets/drawer_screen.dart';
 
 class Dashboard extends StatefulWidget {
   final bool isEmbedded;
   final GlobalKey<ScaffoldState>? scaffoldKey;
-  const Dashboard({super.key, this.isEmbedded = false, this.scaffoldKey});
+
+  const Dashboard({
+    super.key,
+    this.isEmbedded = false,
+    this.scaffoldKey,
+  });
 
   @override
   State<Dashboard> createState() => _DashboardState();
@@ -26,60 +34,299 @@ class Dashboard extends StatefulWidget {
 
 class _DashboardState extends State<Dashboard> {
   @override
+  void initState() {
+    super.initState();
+    // Pre-fetch Approvals data to make the screen transition "instant"
+    RequestApprovals.preFetch();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final effectiveKey = widget.scaffoldKey ?? GlobalKey<ScaffoldState>();
     final size = MediaQuery.of(context).size;
     final width = size.width;
     final height = size.height;
 
     return Scaffold(
-      key: effectiveKey,
       backgroundColor: Colors.grey[100],
-      drawer: const PurchaseDrawer(),
-      drawerEnableOpenDragGesture: !widget.isEmbedded,
-      appBar: widget.isEmbedded
-          ? null
-          : AppBar(
-              backgroundColor: const Color(0xFF26A69A),
-              elevation: 0,
-              centerTitle: false,
-              title: Text(
-                "Purchase Management",
-                style: GoogleFonts.outfit(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 18.sp,
-                ),
-              ),
-              actions: [
-                IconButton(
-                  icon: const Icon(
-                    Icons.notifications_none,
-                    color: Colors.white,
-                  ),
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const NotificationScreen(),
-                      ),
-                    );
-                  },
-                ),
-                const SizedBox(width: 8),
-                GestureDetector(
-                  onTap: () {
-                    Scaffold.of(context).openDrawer();
-                  },
-                  child: const CircleAvatar(
-                    radius: 16,
-                    backgroundColor: Colors.white24,
-                    backgroundImage: AssetImage('assets/profile.png'),
-                  ),
-                ),
-                const SizedBox(width: 16),
-              ],
+      appBar: AppBar(
+        backgroundColor: const Color(0xff26A69A),
+        elevation: 0,
+        titleSpacing: 0,
+        leading: Builder(
+          builder: (context) {
+            return IconButton(
+              icon: const Icon(Icons.menu, color: Colors.white, size: 28),
+              onPressed: () {
+                Scaffold.of(context).openDrawer();
+              },
+            );
+          },
+        ),
+        title: const Text(
+          "Purchase Management",
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        actions: [
+          IconButton(
+            icon: const Icon(
+              Icons.notifications_none,
+              color: Colors.white,
+              size: 28,
             ),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const NotificationScreen(),
+                ),
+              );
+            },
+          ),
+          const SizedBox(width: 4),
+          InkWell(
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const ProfileScreen()),
+              );
+            },
+            child: const CircleAvatar(
+              radius: 18,
+              backgroundColor: Colors.white24,
+              backgroundImage: AssetImage('assets/profile.png'),
+            ),
+          ),
+          const SizedBox(width: 16),
+        ],
+      ),
+      drawer: Drawer(
+        child: Container(
+          color: Colors.white,
+          child: SafeArea(
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  /// Header
+                  Padding(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: width * 0.05,
+                      vertical: height * 0.02,
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          "Menu",
+                          style: TextStyle(
+                            fontSize: width * 0.045,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        Builder(
+                          builder: (context) {
+                            return InkWell(
+                              onTap: () {
+                                Scaffold.of(context).closeDrawer();
+                              },
+                              child: const Icon(
+                                Icons.close,
+                                color: Colors.black,
+                              ),
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  Divider(color: Colors.grey.shade300, height: 1),
+
+                  /// Profile Tile
+                  Padding(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: width * 0.05,
+                      vertical: height * 0.02,
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: width * 0.1,
+                          height: width * 0.1,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Colors.grey.shade100,
+                            border: Border.all(color: Colors.grey.shade300),
+                          ),
+                          child: Icon(
+                            Icons.person,
+                            color: Colors.black,
+                            size: width * 0.06,
+                          ),
+                        ),
+                        SizedBox(width: width * 0.04),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              "Murali Prakash",
+                              style: TextStyle(
+                                fontSize: width * 0.035,
+                                fontWeight: FontWeight.normal,
+                              ),
+                            ),
+                            Text(
+                              "+91 908079 51**",
+                              style: TextStyle(
+                                fontSize: width * 0.035,
+                                color: Colors.black87,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  Divider(
+                    color: Colors.grey.shade300,
+                    height: 1,
+                    indent: width * 0.05,
+                    endIndent: width * 0.05,
+                  ),
+
+                  /// Settings Item
+                  _buildDrawerItem(
+                    Icons.settings,
+                    "Settings",
+                    width,
+                    height,
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const SettingsScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                  Divider(
+                    color: Colors.grey.shade300,
+                    height: 1,
+                    indent: width * 0.05,
+                    endIndent: width * 0.05,
+                  ),
+
+                  /// Privacy Item
+                  _buildDrawerItem(
+                    Icons.privacy_tip_outlined,
+                    "Privacy & Security",
+                    width,
+                    height,
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const PrivacyPolicyScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                  Divider(
+                    color: Colors.grey.shade300,
+                    height: 1,
+                    indent: width * 0.05,
+                    endIndent: width * 0.05,
+                  ),
+
+                  /// Logout Item
+                  _buildDrawerItem(
+                    Icons.logout,
+                    "Logout",
+                    width,
+                    height,
+                    onTap: () {
+                      showDialog(
+                        context: context,
+                        builder: (context) => AlertDialog(
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          title: const Text(
+                            "Confirm Logout",
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          content: const Text(
+                            "Are you sure you want to logout?",
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.black,
+                            ),
+                          ),
+                          actions: [
+                            ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.grey.shade200,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                              onPressed: () => Navigator.pop(context),
+                              child: const Text(
+                                "Cancel",
+                                style: TextStyle(color: Colors.black),
+                              ),
+                            ),
+                            ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.red,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                              onPressed: () async {
+                                final prefs =
+                                    await SharedPreferences.getInstance();
+                                await prefs.clear();
+
+                                if (context.mounted) {
+                                  Navigator.pushAndRemoveUntil(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) =>
+                                          const MobileLoginScreen(),
+                                    ),
+                                    (route) => false,
+                                  );
+                                }
+                              },
+                              child: const Text(
+                                "Logout",
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                  Divider(
+                    color: Colors.grey.shade300,
+                    height: 1,
+                    indent: width * 0.05,
+                    endIndent: width * 0.05,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+
       bottomNavigationBar: const CustomBottomNavBar(selectedIndex: 0),
 
       body: SingleChildScrollView(
@@ -798,6 +1045,38 @@ class _DashboardState extends State<Dashboard> {
           ),
         );
       },
+    );
+  }
+
+  Widget _buildDrawerItem(
+    IconData icon,
+    String title,
+    double width,
+    double height, {
+    VoidCallback? onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: EdgeInsets.symmetric(
+          horizontal: width * 0.05,
+          vertical: height * 0.02,
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: const Color(0xFF26A69A), size: width * 0.06),
+            SizedBox(width: width * 0.04),
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: width * 0.04,
+                fontWeight: FontWeight.w600,
+                color: Colors.black87,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

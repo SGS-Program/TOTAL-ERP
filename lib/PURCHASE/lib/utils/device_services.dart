@@ -94,15 +94,12 @@ class DeviceServices {
 
       Position? position;
       try {
-        // Increased timeout to 15 seconds for more reliable fix
         position = await Geolocator.getCurrentPosition(
-          locationSettings: const LocationSettings(
-            accuracy: LocationAccuracy.medium,
-            timeLimit: Duration(seconds: 15),
-          ),
+          desiredAccuracy: LocationAccuracy.medium,
+          timeLimit: const Duration(seconds: 5),
         );
       } catch (e) {
-        debugPrint("Error getting current position: $e, trying last known...");
+        debugPrint("Error getting current position: $e");
         position = await Geolocator.getLastKnownPosition();
       }
 

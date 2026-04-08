@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api_client.dart';
 
@@ -10,10 +11,9 @@ class LeaveService {
   /// ===============================
   static Future<String?> getEmployeeTableId() async {
     final prefs = await SharedPreferences.getInstance();
-    final empId = prefs.getString('login_cus_id') ??
-                  prefs.getString('server_uid') ??
-                  prefs.getString('employee_table_id');
-    return empId;
+    return prefs.getString('login_cus_id') ??
+           prefs.get('uid')?.toString() ??
+           "54";
   }
 
   /// ===============================
@@ -21,21 +21,32 @@ class LeaveService {
   /// ===============================
   static Future<List<String>> getLeaveTypes() async {
     final prefs = await SharedPreferences.getInstance();
+    final empId = await getEmployeeTableId();
     
-    final res = await _apiClient.post({
-        "type": "2044",
-        "cid": prefs.getString('cid') ?? "",
-        "device_id": prefs.getString('device_id') ?? "",
-        "lt": (prefs.getDouble('lat') ?? 145).toString(),
-        "ln": (prefs.getDouble('lng') ?? 145).toString(),
-    });
+    final body = {
+      "type": "2044",
+      "uid": empId ?? "54",
+      "id": empId ?? "54",
+      "token": prefs.getString('token') ?? "",
+      "cid": prefs.getString('cid') ?? prefs.getString('cid_str') ?? "21472147",
+      "device_id": prefs.getString('device_id') ?? "123456",
+      "lt": (prefs.getDouble('lat') ?? 145).toString(),
+      "ln": (prefs.getDouble('lng') ?? 145).toString(),
+    };
+
+  debugPrint("FETCHING LEAVE TYPES PARAMS => $body");
+    
+    final res = await _apiClient.post(body);
+    
+    debugPrint("LEAVE TYPES API RESPONSE => ${res.body}");
 
     final data = jsonDecode(res.body);
 
-    if (data["error"] == false) {
-      return List<String>.from(
-        data["data"]["leave_types"].map((e) => e["leave_type_name"].toString()),
-      );
+    if (data["error"].toString() == "false") {
+      final List? rawList = data["data"] is Map ? data["data"]["leave_types"] : (data["leave_types"] ?? data["data"]);
+      if (rawList is List) {
+        return rawList.map((e) => (e["leave_type_name"] ?? e["leave_type"] ?? e.toString()).toString()).toList();
+      }
     }
     return [];
   }
@@ -68,7 +79,7 @@ class LeaveService {
         "leave_start_date": fromDate,
         "leave_end_date": toDate,
         "reason": reason,
-        "cid": prefs.getString('cid') ?? "",
+        "cid": prefs.getString('cid') ?? prefs.getString('cid_str') ?? "",
         "device_id": prefs.getString('device_id') ?? "",
         "lt": (prefs.getDouble('lat') ?? 145).toString(),
         "ln": (prefs.getDouble('lng') ?? 145).toString(),

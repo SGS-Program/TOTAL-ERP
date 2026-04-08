@@ -6,13 +6,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 class MobileverifyOTP extends StatefulWidget {
   final String phoneNumber;
   final VoidCallback onVerify;
-  final String? initialOtp;
 
   const MobileverifyOTP({
     super.key,
     required this.phoneNumber,
     required this.onVerify,
-    this.initialOtp,
   });
 
   @override
@@ -27,21 +25,6 @@ class _MobileverifyOTPState extends State<MobileverifyOTP> {
   );
 
   bool _isLoading = false;
-
-  @override
-  void initState() {
-    super.initState();
-    // Auto-fill and auto-verify if initialOtp is provided
-    if (widget.initialOtp != null && widget.initialOtp!.length == 6) {
-      for (int i = 0; i < 6; i++) {
-        _controllers[i].text = widget.initialOtp![i];
-      }
-      Future.delayed(const Duration(milliseconds: 500), () {
-        if (mounted) _verifyOTP();
-      });
-    }
-  }
-
 
   Future<void> _verifyOTP() async {
     if (_isLoading) return;
@@ -68,21 +51,19 @@ class _MobileverifyOTPState extends State<MobileverifyOTP> {
       final lt = prefs.getString('lt') ?? '123';
       final deviceId = prefs.getString('device_id') ?? '1';
 
-      final response = await http
-          .post(
-            Uri.parse("https://erpsmart.in/total/api/m_api/"),
-            body: {
-              "type": "5002",
-              "ln": ln,
-              "lt": lt,
-              "device_id": deviceId,
-              "mobile": widget.phoneNumber,
-              "cid": cid,
-              "otp": otp,
-              "token": fToken,
-            },
-          )
-          .timeout(const Duration(seconds: 15));
+      final response = await http.post(
+        Uri.parse("https://erpsmart.in/total/api/m_api/"),
+        body: {
+          "type": "5002",
+          "ln": ln,
+          "lt": lt,
+          "device_id": deviceId,
+          "mobile": widget.phoneNumber,
+          "cid": cid,
+          "otp": otp,
+          "token": fToken,
+        },
+      ).timeout(const Duration(seconds: 15));
 
       debugPrint("OTP Verify Response: ${response.body}");
       if (response.statusCode == 200) {
@@ -96,14 +77,12 @@ class _MobileverifyOTPState extends State<MobileverifyOTP> {
 
           if (mounted) {
             debugPrint("Verification successful, triggering onVerify callback");
-            widget.onVerify();
+            widget.onVerify(); 
           }
         } else {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(data['message'] ?? "OTP verification failed"),
-              ),
+              SnackBar(content: Text(data['message'] ?? "OTP verification failed")),
             );
           }
         }
@@ -116,9 +95,9 @@ class _MobileverifyOTPState extends State<MobileverifyOTP> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text("Error: $e")));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error: $e")),
+        );
       }
     } finally {
       if (mounted) {
@@ -260,7 +239,7 @@ class _MobileverifyOTPState extends State<MobileverifyOTP> {
                     } else if (value.isEmpty && index > 0) {
                       _focusNodes[index - 1].requestFocus();
                     }
-
+                    
                     // Auto-verify if 6th digit is entered
                     if (value.isNotEmpty && index == 5) {
                       _verifyOTP();
@@ -309,9 +288,7 @@ class _MobileverifyOTPState extends State<MobileverifyOTP> {
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(10 * scale),
                 ),
-                disabledBackgroundColor: const Color(
-                  0xFF26A69A,
-                ).withOpacity(0.6),
+                disabledBackgroundColor: const Color(0xFF26A69A).withOpacity(0.6),
               ),
               child: _isLoading
                   ? const SizedBox(

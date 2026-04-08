@@ -249,10 +249,8 @@ class AttendanceScreenState extends State<AttendanceScreen> {
       // ✅ Standardized UID priority: login_cus_id (Primary)
       uid =
           prefs.getString('login_cus_id') ??
-          prefs.getString('server_uid') ??
-          prefs.getString('employee_table_id') ??
-          prefs.getInt('uid')?.toString() ??
-          "";
+          prefs.get('uid')?.toString() ??
+          "54";
       cid = prefs.getString('cid') ?? "";
       serverUidString = prefs.getString('server_uid') ?? uid;
       userName = prefs.getString('name') ?? "User";
@@ -313,10 +311,8 @@ class AttendanceScreenState extends State<AttendanceScreen> {
     // 1. Get identifiers from SharedPreferences
     final String storedUid =
         prefs.getString('login_cus_id') ??
-        prefs.getString('server_uid') ??
-        prefs.getString('employee_table_id') ??
-        prefs.getInt('uid')?.toString() ??
-        "";
+        prefs.get('uid')?.toString() ??
+        "54";
     final storedCid = prefs.getString('cid') ?? "";
     final storedCode = prefs.getString('employee_code');
     final storedName = prefs.getString('name');

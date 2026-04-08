@@ -91,10 +91,8 @@ class _LeaveManagementScreenState extends State<LeaveManagementScreen> {
       // âœ… PRIMARY UID: Use login_cus_id as requested for leave history
       final String uid =
           prefs.getString('login_cus_id') ??
-          prefs.getString('server_uid') ??
-          prefs.getString('employee_table_id') ??
-          prefs.getInt('uid')?.toString() ??
-          "2";
+          "54";
+      final String token = prefs.getString('token') ?? "";
 
       final String deviceId = prefs.getString('device_id') ?? "123456";
       final String lt = prefs.getDouble('lat')?.toString() ?? "145";
@@ -104,13 +102,14 @@ class _LeaveManagementScreenState extends State<LeaveManagementScreen> {
           .post(
             Uri.parse("https://erpsmart.in/total/api/m_api/"),
             body: {
-              "cid": prefs.getString('cid') ?? "",
+              "cid": prefs.getString('cid') ?? prefs.getString('cid_str') ?? "21472147",
               "device_id": deviceId,
               "lt": lt,
               "ln": ln,
               "type": "2051",
               "uid": uid,
               "id": uid,
+              if (token.isNotEmpty) "token": token,
             },
           )
           .timeout(const Duration(seconds: 20));
@@ -178,10 +177,8 @@ class _LeaveManagementScreenState extends State<LeaveManagementScreen> {
       final prefs = await SharedPreferences.getInstance();
       final String uid =
           prefs.getString('login_cus_id') ??
-          prefs.getString('server_uid') ??
-          prefs.getString('employee_table_id') ??
-          prefs.getInt('uid')?.toString() ??
-          "2";
+          "54";
+      final String token = prefs.getString('token') ?? "";
 
       final String deviceId = prefs.getString('device_id') ?? "123456";
       final String lt = prefs.getDouble('lat')?.toString() ?? "145";
@@ -191,13 +188,14 @@ class _LeaveManagementScreenState extends State<LeaveManagementScreen> {
           .post(
             Uri.parse("https://erpsmart.in/total/api/m_api/"),
             body: {
-              "cid": prefs.getString('cid') ?? "",
+              "cid": prefs.getString('cid') ?? prefs.getString('cid_str') ?? "21472147",
               "device_id": deviceId,
               "lt": lt,
               "ln": ln,
               "type": "2052",
               "uid": uid,
               "id": uid,
+              if (token.isNotEmpty) "token": token,
             },
           )
           .timeout(const Duration(seconds: 20));
@@ -226,10 +224,8 @@ class _LeaveManagementScreenState extends State<LeaveManagementScreen> {
       final prefs = await SharedPreferences.getInstance();
       final String uid =
           prefs.getString('login_cus_id') ??
-          prefs.getString('server_uid') ??
-          prefs.getString('employee_table_id') ??
-          prefs.getInt('uid')?.toString() ??
-          "2";
+          "54";
+      final String token = prefs.getString('token') ?? "";
 
       final String deviceId = prefs.getString('device_id') ?? "123456";
       final String lt = prefs.getDouble('lat')?.toString() ?? "145";
@@ -239,12 +235,14 @@ class _LeaveManagementScreenState extends State<LeaveManagementScreen> {
           .post(
             Uri.parse("https://erpsmart.in/total/api/m_api/"),
             body: {
-              "cid": prefs.getString('cid') ?? "",
+              "cid": prefs.getString('cid') ?? prefs.getString('cid_str') ?? "21472147",
               "device_id": deviceId,
               "lt": lt,
               "ln": ln,
               "type": "2078",
               "uid": uid,
+              "id": uid,
+              if (token.isNotEmpty) "token": token,
             },
           )
           .timeout(const Duration(seconds: 20));

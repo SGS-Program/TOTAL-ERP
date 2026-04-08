@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/module_model.dart';
-
-import 'package:crm_admin_app/Screens/dashboard_screen.dart' as crm_admin;
 import 'package:purchase_erp/dashboard.dart' as purchase;
-import 'package:hrm_admin_app/Screens/Admin/admin_dashboard.dart' as hrm_admin;
+import 'package:crm/Screens/Home/dashboard_screen.dart' as crm;
 import 'package:sale_management/Sales_Module/sale_dashboard.dart' as sale_mgmt;
 import 'package:ecommerce/ecommerce.dart' as ecommerce;
 import 'package:accounting_erp/accounting_root.dart' as accounting;
@@ -22,11 +20,11 @@ final List<ModuleItem> allModules = [
     screenBuilder: (context) => const hrm.MainRoot(isEmbedded: true),
   ),
   ModuleItem(
-    title: 'CRM Admin',
+    title: 'CRM',
     imagePath: 'assets/images/crm.png',
     bgColor: Color(0xFFE8F5E9),
     fallbackIcon: Icons.handshake,
-    screenBuilder: (context) => crm_admin.DashboardScreen(isEmbedded: true, scaffoldKey: moduleScaffoldKey),
+    screenBuilder: (context) => crm.DashboardScreen(initialIndex: 0),
   ),
   ModuleItem(
     title: 'Inventory',

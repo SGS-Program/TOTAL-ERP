@@ -3,10 +3,11 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:hrm/views/widgets/user_avatar.dart';
 import 'package:hrm/views/home/security.dart';
 import 'package:hrm/views/home_screen/employee_detail.dart';
-import 'package:hrm/views/login_section/login_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../main_root.dart';
-import 'account_setting.dart';
+import '../../views/main_root.dart';
+import 'package:hrm/views/home/account_setting.dart';
+// erp login screen is handled by host erp_smart app
+
 import 'expense.dart';
 import 'feedback.dart';
 import 'notification_alert.dart';
@@ -50,43 +51,43 @@ class _SettingsScreenState extends State<SettingsScreen> {
         });
       }
 
-      // ✅ CRITICAL: Using the original login_cus_id ensures the token matches
-      final String? sessionUid = prefs.getString('login_cus_id');
+      // ✅ Standardized Identifier lookup
+      final String uidToUse = prefs.getString('uid') ?? 
+                              prefs.getString('login_cus_id') ?? 
+                              prefs.getString('employee_table_id') ?? 
+                              "84";
 
-      // Fallback only to the MOST verified ID possible
-      final String uidToUse =
-          sessionUid ?? prefs.getString('employee_table_id') ?? "";
-
-      final String lat = prefs.getDouble('lat')?.toString() ?? "";
-      final String lng = prefs.getDouble('lng')?.toString() ?? "";
-
-      // Get Device ID
-      String deviceId = prefs.getString('device_id') ?? "";
+      final String lat = prefs.getDouble('lat')?.toString() ?? "145";
+      final String lng = prefs.getDouble('lng')?.toString() ?? "145";
+      final String cid = prefs.getString('cid') ?? prefs.getString('cid_str') ?? "21472147";
+      final String token = prefs.getString('token') ?? "";
+      final String deviceId = prefs.getString('device_id') ?? "123456";
 
       final response = await EmployeeApi.getEmployeeDetails(
         uid: uidToUse,
-        cid: prefs.getString('cid') ?? "",
+        cid: cid,
         deviceId: deviceId,
         lat: lat,
         lng: lng,
-        token: prefs.getString('token') ?? "",
+        token: token,
       );
 
       if (response["error"] == false || response["error"] == "false") {
         if (!mounted) return;
+        final profileData = response["data"] ?? {};
         setState(() {
-          userName = response["name"] ?? prefs.getString('name') ?? "User";
+          userName = profileData["name"]?.toString() ?? prefs.getString('name') ?? "User";
           userCode =
-              response["employee_code"] ??
+              profileData["employee_code"]?.toString() ??
               prefs.getString('employee_code') ??
               "";
           userMobile =
-              response["contact_number"] ??
-              response["mobile"] ??
+              profileData["contact_number"]?.toString() ??
+              profileData["mobile"]?.toString() ??
               prefs.getString('mobile') ??
               "";
           profilePhoto =
-              response["profile_photo"] ??
+              profileData["profile_photo"]?.toString() ??
               prefs.getString('profile_photo') ??
               "";
           isLoading = false;
@@ -96,24 +97,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
         await prefs.setString('name', userName);
         await prefs.setString('employee_code', userCode);
         await prefs.setString('mobile', userMobile);
-        await prefs.setString('dept', response["department"] ?? "");
-        await prefs.setString('employee_type', response["employee_type"] ?? "");
-        await prefs.setString('doj', response["date_of_joining"] ?? "");
-        await prefs.setString('dob', response["dob"] ?? "");
-        await prefs.setString('address', response["address"] ?? "");
+        await prefs.setString('dept', profileData["department"]?.toString() ?? "");
+        await prefs.setString('employee_type', profileData["employee_type"]?.toString() ?? "");
+        await prefs.setString('doj', profileData["date_of_joining"]?.toString() ?? "");
+        await prefs.setString('dob', profileData["dob"]?.toString() ?? "");
+        await prefs.setString('address', profileData["address"]?.toString() ?? "");
         await prefs.setString('profile_photo', profilePhoto);
 
         // ✅ IMPORTANT: Save the UID from Employee Details as the authoritative internal ID
-        if (response["uid"] != null) {
-          final returnedUid = response["uid"].toString();
-          await prefs.setString('employee_table_id', returnedUid);
-          await prefs.setString(
-            'assign_to',
-            returnedUid,
-          ); // Essential for Marketing
-          await prefs.setInt('uid', int.tryParse(returnedUid) ?? 0);
+        final dynamic returnedCusId = profileData["cus_id"] ?? profileData["id"];
+        if (returnedCusId != null) {
+          final String returnedUidStr = returnedCusId.toString();
+          await prefs.setString('employee_table_id', returnedUidStr);
+          await prefs.setString('uid', returnedUidStr);
+          await prefs.setString('assign_to', returnedUidStr); // Essential for Marketing
+          await prefs.setInt('uid_int', int.tryParse(returnedUidStr) ?? 0);
           debugPrint(
-            "SYNC => Local UID updated from Profile API: $returnedUid",
+            "SYNC => Local UID updated from Profile API: $returnedUidStr",
           );
         }
       } else if (response["error_msg"]?.toString().toLowerCase().contains(
@@ -172,13 +172,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
 
     if (mounted) {
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (_) => const LoginScreen()),
-        (route) => false,
-      );
+      // ✅ Back to Root (Host app will handle session expiration)
+      Navigator.of(context, rootNavigator: true).popUntil((route) => route.isFirst);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Session expired. Please login again.")),
+        const SnackBar(content: Text("Logged out successfully.")),
       );
     }
   }
@@ -551,12 +548,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             }
 
                             if (mounted) {
-                              Navigator.pushAndRemoveUntil(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => const LoginScreen(),
-                                ),
-                                (route) => false,
+                              Navigator.of(context, rootNavigator: true).popUntil((route) => route.isFirst);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text("Logged out successfully.")),
                               );
                             }
                           },

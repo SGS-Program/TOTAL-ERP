@@ -15,26 +15,34 @@ class PRDetailsScreen extends StatelessWidget {
     this.prFullData,
   });
 
+  double _calculateTotalQty() {
+    if (prFullData == null) return 0;
+    double total = 0;
+    for (var item in prFullData!.items) {
+      final qtyStr = item.quantityRequired ?? item.qty ?? '0';
+      total += double.tryParse(qtyStr) ?? 0;
+    }
+    return total;
+  }
+
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
     final width = size.width;
 
-    // Determine status color background
-    Color statusBgColor = const Color(0xFFC89211);
-    if (status == "Approve") {
-      statusBgColor = const Color(0xFF0F8C2A);
-    } else if (status == "Rejected") {
-      statusBgColor = const Color(0xFFAD0F14);
-    }
-
     final master = prFullData?.master;
     final items = prFullData?.items ?? [];
+
+    // Colors matching the image
+    const Color primaryTeal = Color(0xff26A69A);
+    const Color primaryPurple = Color(0xff3F1299);
+    const Color statusGreen = Color(0xff0F8C2A);
+    const Color lightGrey = Color(0xff757575);
 
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        backgroundColor: const Color(0xff26A69A),
+        backgroundColor: primaryTeal,
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white),
@@ -42,27 +50,24 @@ class PRDetailsScreen extends StatelessWidget {
         ),
         title: const Text(
           "PR Details",
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+            fontSize: 18,
+          ),
         ),
       ),
       body: SingleChildScrollView(
         padding: EdgeInsets.all(width * 0.04),
         child: Column(
           children: [
-            /// 1. HEADER INFO CARD
+            /// 1. TOP INFO CARD
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: Colors.grey.shade300),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.02),
-                    blurRadius: 5,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -76,15 +81,15 @@ class PRDetailsScreen extends StatelessWidget {
                           Text(
                             prId,
                             style: const TextStyle(
-                              color: Color(0xff3F1299),
+                              color: primaryPurple,
                               fontWeight: FontWeight.bold,
                               fontSize: 18,
                             ),
                           ),
                           Text(
-                            "Dept: $department",
-                            style: TextStyle(
-                              color: Colors.grey.shade600,
+                            department,
+                            style: const TextStyle(
+                              color: lightGrey,
                               fontSize: 13,
                             ),
                           ),
@@ -92,11 +97,11 @@ class PRDetailsScreen extends StatelessWidget {
                       ),
                       Container(
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 6,
+                          horizontal: 12,
+                          vertical: 4,
                         ),
                         decoration: BoxDecoration(
-                          color: statusBgColor,
+                          color: statusGreen,
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Text(
@@ -113,47 +118,48 @@ class PRDetailsScreen extends StatelessWidget {
                   const SizedBox(height: 16),
                   const Text(
                     "Requested By",
-                    style: TextStyle(color: Colors.black, fontSize: 14),
+                    style: TextStyle(color: lightGrey, fontSize: 13),
                   ),
                   Text(
                     master?.requestedBy ?? "N/A",
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                    ),
                   ),
                   const SizedBox(height: 16),
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const Text(
-                            "Priority",
-                            style: TextStyle(color: Colors.black, fontSize: 14),
+                            "Approver",
+                            style: TextStyle(color: lightGrey, fontSize: 13),
                           ),
                           Text(
                             master?.priority ?? "N/A",
                             style: const TextStyle(
                               fontWeight: FontWeight.bold,
                               fontSize: 15,
-                              color: Colors.black,
                             ),
                           ),
                         ],
                       ),
+                      const Spacer(),
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
                           const Text(
-                            "Requested Date",
-                            style: TextStyle(color: Colors.black, fontSize: 14),
+                            "Requested.Date",
+                            style: TextStyle(color: Colors.grey, fontSize: 13),
                           ),
                           Text(
-                            master?.reqDate ?? "N/A",
+                            master?.reqDate ?? "01-03-2026",
                             style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14,
                               color: Colors.black,
+                              fontSize: 13,
                             ),
                           ),
                         ],
@@ -167,68 +173,134 @@ class PRDetailsScreen extends StatelessWidget {
             const SizedBox(height: 16),
 
             /// 2. REQUESTED ITEM CARD
-            if (items.isNotEmpty)
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: Colors.grey.shade300),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      "Requested Items",
-                      style: TextStyle(
-                        color: Color(0xff3F1299),
-                        fontWeight: FontWeight.bold,
-                        fontSize: 15,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    ListView.separated(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: items.length,
-                      separatorBuilder: (context, index) => const Divider(height: 24),
-                      itemBuilder: (context, index) {
-                        final item = items[index];
-                        return itemRow(
-                          item.productName ?? item.itemCode ?? "N/A",
-                          item.itemDescription ?? "",
-                          "Qty: ${item.quantityRequired ?? '0'} ${item.uom ?? ''}",
-                        );
-                      },
-                    ),
-                  ],
-                ),
-              )
-            else
-              const Center(child: Text("No items found for this request")),
-
-            const SizedBox(height: 16),
-
-            /// 3. REMARKS/DTIME CARD
             Container(
-              width: double.infinity,
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: Colors.grey.shade300),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
-                    "Creation Time",
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                    "Requested Item",
+                    style: TextStyle(
+                      color: primaryPurple,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                    ),
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    master?.dtime ?? "N/A",
-                    style: TextStyle(color: Colors.grey.shade700, fontSize: 14),
+                  const SizedBox(height: 12),
+                  if (items.isEmpty)
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          "Item Code",
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                        ),
+
+                        const Text(
+                          "Dell XPS 15",
+                          style: TextStyle(
+                            color: Colors.black,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w400,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        const Text(
+                          "Item Name",
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                        ),
+                        const Text(
+                          "Wireless Mouse",
+                          style: TextStyle(
+                            color: Colors.black,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w400,
+                          ),
+                        ),
+                        const Text(
+                          "Quantity: 5",
+                          style: TextStyle(color: Colors.black, fontSize: 14),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+                    )
+                  else
+                    ListView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: items.length,
+                      itemBuilder: (context, index) {
+                        final item = items[index];
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 12.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                item.productName ??
+                                    item.itemCode ??
+                                    "Unnamed Item",
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                ),
+                              ),
+                              if (item.itemDescription != null &&
+                                  item.itemDescription!.isNotEmpty)
+                                Text(
+                                  item.itemDescription!,
+                                  style: const TextStyle(
+                                    color: lightGrey,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              Text(
+                                "Quantity: ${item.quantityRequired ?? item.qty ?? '0'}",
+                                style: const TextStyle(
+                                  color: lightGrey,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  const Divider(),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8.0),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          "Total QTY",
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15,
+                          ),
+                        ),
+                        Text(
+                          items.isEmpty
+                              ? "15"
+                              : _calculateTotalQty().toStringAsFixed(0),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
@@ -236,14 +308,38 @@ class PRDetailsScreen extends StatelessWidget {
 
             const SizedBox(height: 16),
 
-            /// 4. APPROVED BY STRIP (Visible only if status is Approve?)
-            if (status == "Approve")
+            /// 3. REMARKS CARD
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.grey.shade300),
+              ),
+              child: const Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    "Remarks",
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                  ),
+                  SizedBox(height: 8),
+                  Text(
+                    "Urgent requirement for new hires",
+                    style: TextStyle(color: lightGrey, fontSize: 14),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            /// 4. APPROVED BY STRIP
+            if (status == "Approve" || status == "Approved")
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
-                ),
+                padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   color: const Color(0xffE6FFE8),
                   borderRadius: BorderRadius.circular(8),
@@ -252,44 +348,45 @@ class PRDetailsScreen extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      "Status Info",
+                      "Approved By",
                       style: TextStyle(
-                        color: Color(0xff097A1C),
+                        color: statusGreen,
                         fontWeight: FontWeight.bold,
                         fontSize: 15,
                       ),
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 2),
                     Text(
-                      "This request has been approved.",
-                      style: const TextStyle(color: Colors.black87, fontSize: 13),
+                      "Manager ${master?.reqDate ?? ''}",
+                      style: const TextStyle(color: lightGrey, fontSize: 13),
                     ),
                   ],
                 ),
               ),
 
-            const SizedBox(height: 24),
+            const SizedBox(height: 32),
 
-            /// 6. BOTTOM ROW BUTTONS
+            /// 5. BOTTOM BUTTONS
             Row(
               children: [
                 Expanded(
                   child: SizedBox(
                     height: 48,
                     child: ElevatedButton(
+                      onPressed: () {},
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xff26A69A),
+                        backgroundColor: primaryTeal,
+                        foregroundColor: Colors.white,
+                        elevation: 0,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        elevation: 0,
                       ),
-                      onPressed: () {},
                       child: const Text(
-                        "Print PDF",
+                        "Print DCPDF",
                         style: TextStyle(
-                          color: Colors.white,
                           fontWeight: FontWeight.bold,
+                          fontSize: 15,
                         ),
                       ),
                     ),
@@ -300,21 +397,19 @@ class PRDetailsScreen extends StatelessWidget {
                   child: SizedBox(
                     height: 48,
                     child: OutlinedButton(
+                      onPressed: () {},
                       style: OutlinedButton.styleFrom(
-                        side: const BorderSide(
-                          color: Color(0xff26A69A),
-                          width: 1.5,
-                        ),
+                        side: const BorderSide(color: primaryTeal, width: 1),
+                        foregroundColor: primaryTeal,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(8),
                         ),
                       ),
-                      onPressed: () {},
                       child: const Text(
-                        "Share",
+                        "Send For Approval",
                         style: TextStyle(
-                          color: Color(0xff26A69A),
                           fontWeight: FontWeight.bold,
+                          fontSize: 14,
                         ),
                       ),
                     ),
@@ -322,39 +417,10 @@ class PRDetailsScreen extends StatelessWidget {
                 ),
               ],
             ),
+            const SizedBox(height: 16),
           ],
         ),
       ),
-    );
-  }
-
-  Widget itemRow(String title, String subtitle, String qty) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-              ),
-              if (subtitle.isNotEmpty) ...[
-                const SizedBox(height: 4),
-                Text(subtitle, style: TextStyle(color: Colors.black87, fontSize: 14)),
-              ],
-              const SizedBox(height: 4),
-              Text(qty,
-                  style: const TextStyle(
-                      color: Color(0xff26A69A),
-                      fontWeight: FontWeight.w600,
-                      fontSize: 13)),
-            ],
-          ),
-        ),
-      ],
     );
   }
 }

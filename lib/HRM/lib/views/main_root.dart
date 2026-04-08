@@ -31,38 +31,47 @@ class _MainRootState extends State<MainRoot> {
       final prefs = await SharedPreferences.getInstance();
       
       // ✅ SESSION UID: Use login_cus_id for authentication
-      final String sessionUid = prefs.getString('login_cus_id') ?? 
+      // ✅ Standardized Identifier lookup
+      final String sessionUid = prefs.getString('uid') ?? 
+                                prefs.getString('login_cus_id') ?? 
                                 prefs.getString('employee_table_id') ?? 
                                 "84";
 
-      final String lat = prefs.getDouble('lat')?.toString() ?? "";
-      final String lng = prefs.getDouble('lng')?.toString() ?? "";
-      final String deviceId = prefs.getString('device_id') ?? "";
+      final String lat = prefs.getDouble('lat')?.toString() ?? "145";
+      final String lng = prefs.getDouble('lng')?.toString() ?? "145";
+      final String deviceId = prefs.getString('device_id') ?? "123456";
+      final String cid = prefs.getString('cid') ?? prefs.getString('cid_str') ?? "21472147";
+      final String token = prefs.getString('token') ?? "";
       
       final response = await EmployeeApi.getEmployeeDetails(
         uid: sessionUid,
-        cid: prefs.getString('cid') ?? "21472147",
+        cid: cid,
         deviceId: deviceId,
         lat: lat,
         lng: lng,
-        token: prefs.getString('token') ?? "",
+        token: token,
       );
 
+      debugPrint("MainRoot Employee API Response => $response");
+
       if (response["error"] == false || response["error"] == "false") {
+        final profileData = response["data"] ?? {};
         // Save profile data for all screens to use immediately
-        await prefs.setString('name', response["name"] ?? "User");
-        await prefs.setString('employee_code', response["employee_code"] ?? "");
-        await prefs.setString('mobile', response["contact_number"] ?? response["mobile"] ?? "");
-        await prefs.setString('profile_photo', response["profile_photo"] ?? "");
+        await prefs.setString('name', profileData["name"]?.toString() ?? "User");
+        await prefs.setString('employee_code', profileData["employee_code"]?.toString() ?? "");
+        await prefs.setString('mobile', profileData["contact_number"]?.toString() ?? profileData["mobile"]?.toString() ?? "");
+        await prefs.setString('profile_photo', profileData["profile_photo"]?.toString() ?? "");
         
         // Sync Internal UID
-        if (response["uid"] != null) {
-          final returnedUid = response["uid"].toString();
-          await prefs.setString('employee_table_id', returnedUid);
-          await prefs.setString('assign_to', returnedUid);
-          await prefs.setInt('uid', int.tryParse(returnedUid) ?? 0);
+        final dynamic returnedCusId = profileData["cus_id"] ?? profileData["id"] ?? response["uid"];
+        if (returnedCusId != null) {
+          final String returnedUidStr = returnedCusId.toString();
+          await prefs.setString('employee_table_id', returnedUidStr);
+          await prefs.setString('assign_to', returnedUidStr);
+          await prefs.setInt('uid_int', int.tryParse(returnedUidStr) ?? 0);
+          await prefs.setString('uid', returnedUidStr);
         }
-        debugPrint("MainRoot => Profile Prefetched & Synced");
+        debugPrint("MainRoot => Profile Persisted: ${profileData["name"]}");
       }
     } catch (e) {
       debugPrint("MainRoot Prefetch Error => $e");

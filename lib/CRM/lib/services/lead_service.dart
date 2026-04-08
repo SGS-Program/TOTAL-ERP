@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
-import '../Screens/SignIn/splash.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'preference_service.dart';
 
 class LeadService {
@@ -38,9 +38,10 @@ class LeadService {
     required String leadNo,
   }) async {
     try {
-      String deviceId = SplashScreen.deviceId ?? '';
-      String ln = SplashScreen.ln ?? '';
-      String lt = SplashScreen.lt ?? '';
+      final prefs = await SharedPreferences.getInstance();
+      String deviceId = prefs.getString('device_id') ?? '';
+      String ln = prefs.getString('ln') ?? '';
+      String lt = prefs.getString('lt') ?? '';
 
       String currentCid = await PreferenceService.getCid();
       String? token = await PreferenceService.getToken();
@@ -97,9 +98,10 @@ class LeadService {
     String apiType = '3011',
   }) async {
     try {
-      String deviceId = SplashScreen.deviceId ?? '';
-      String ln = SplashScreen.ln ?? '';
-      String lt = SplashScreen.lt ?? '';
+      final prefs = await SharedPreferences.getInstance();
+      String deviceId = prefs.getString('device_id') ?? '';
+      String ln = prefs.getString('ln') ?? '';
+      String lt = prefs.getString('lt') ?? '';
 
       String currentCid = await PreferenceService.getCid();
       String? token = await PreferenceService.getToken();
@@ -142,9 +144,10 @@ class LeadService {
 
   static Future<List<dynamic>> fetchLeads({required String enquiryType}) async {
     try {
-      String deviceId = SplashScreen.deviceId ?? '';
-      String ln = SplashScreen.ln ?? '';
-      String lt = SplashScreen.lt ?? '';
+      final prefs = await SharedPreferences.getInstance();
+      String deviceId = prefs.getString('device_id') ?? '';
+      String ln = prefs.getString('ln') ?? '';
+      String lt = prefs.getString('lt') ?? '';
 
       String currentCid = await PreferenceService.getCid();
       if (currentCid.isEmpty) currentCid = '21472147';
@@ -212,9 +215,10 @@ class LeadService {
 
   static Future<List<dynamic>> fetchFollowUpHistoryAll() async {
     try {
-      String deviceId = SplashScreen.deviceId ?? '';
-      String ln = SplashScreen.ln ?? '';
-      String lt = SplashScreen.lt ?? '';
+      final prefs = await SharedPreferences.getInstance();
+      String deviceId = prefs.getString('device_id') ?? '';
+      String ln = prefs.getString('ln') ?? '';
+      String lt = prefs.getString('lt') ?? '';
 
       String currentCid = await PreferenceService.getCid();
       String? token = await PreferenceService.getToken();
@@ -262,9 +266,10 @@ class LeadService {
 
   static Future<List<dynamic>> fetchCallSummary(String uid) async {
     try {
-      String deviceId = SplashScreen.deviceId ?? '';
-      String ln = SplashScreen.ln ?? '';
-      String lt = SplashScreen.lt ?? '';
+      final prefs = await SharedPreferences.getInstance();
+      String deviceId = prefs.getString('device_id') ?? '';
+      String ln = prefs.getString('ln') ?? '';
+      String lt = prefs.getString('lt') ?? '';
 
       String currentCid = await PreferenceService.getCid();
       String? token = await PreferenceService.getToken();
@@ -312,9 +317,10 @@ class LeadService {
     Map<String, dynamic> followUpData,
   ) async {
     try {
-      String deviceId = SplashScreen.deviceId ?? '';
-      String ln = SplashScreen.ln ?? '';
-      String lt = SplashScreen.lt ?? '';
+      final prefs = await SharedPreferences.getInstance();
+      String deviceId = prefs.getString('device_id') ?? '';
+      String ln = prefs.getString('ln') ?? '';
+      String lt = prefs.getString('lt') ?? '';
 
       String currentCid = await PreferenceService.getCid();
       String? token = await PreferenceService.getToken();
@@ -370,9 +376,10 @@ class LeadService {
     Map<String, dynamic> followUpData,
   ) async {
     try {
-      String deviceId = SplashScreen.deviceId ?? '';
-      String ln = SplashScreen.ln ?? '';
-      String lt = SplashScreen.lt ?? '';
+      final prefs = await SharedPreferences.getInstance();
+      String deviceId = prefs.getString('device_id') ?? '';
+      String ln = prefs.getString('ln') ?? '';
+      String lt = prefs.getString('lt') ?? '';
 
       String currentCid = await PreferenceService.getCid();
       String? token = await PreferenceService.getToken();
@@ -427,9 +434,10 @@ class LeadService {
 
   static Future<List<dynamic>> fetchDropdownData({required String type}) async {
     try {
-      String deviceId = SplashScreen.deviceId ?? '';
-      String ln = SplashScreen.ln ?? '';
-      String lt = SplashScreen.lt ?? '';
+      final prefs = await SharedPreferences.getInstance();
+      String deviceId = prefs.getString('device_id') ?? '';
+      String ln = prefs.getString('ln') ?? '';
+      String lt = prefs.getString('lt') ?? '';
 
       String currentCid = await PreferenceService.getCid();
       String? token = await PreferenceService.getToken();
@@ -481,9 +489,10 @@ class LeadService {
 
   static Future<List<dynamic>> fetchMeetings() async {
     try {
-      String deviceId = SplashScreen.deviceId ?? '';
-      String ln = SplashScreen.ln ?? '';
-      String lt = SplashScreen.lt ?? '';
+      final prefs = await SharedPreferences.getInstance();
+      String deviceId = prefs.getString('device_id') ?? '';
+      String ln = prefs.getString('ln') ?? '';
+      String lt = prefs.getString('lt') ?? '';
 
       String currentCid = await PreferenceService.getCid();
       String? token = await PreferenceService.getToken();

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:hrm/views/widgets/user_avatar.dart';
+import '../../models/employee_api.dart';
+import 'package:flutter/foundation.dart';
 
 class EmployeeDetailsScreen extends StatefulWidget {
   const EmployeeDetailsScreen({super.key});
@@ -28,7 +30,11 @@ class _EmployeeDetailsScreenState extends State<EmployeeDetailsScreen> {
   String qualification = "";
   String specification = "";
   String passedOut = "";
+  String bloodGroup = "";
+  String emergencyName = "";
+  String emergencyNumber = "";
   String? employeeTableId;
+  bool isLoading = true;
 
   @override
   void initState() {
@@ -52,7 +58,84 @@ class _EmployeeDetailsScreenState extends State<EmployeeDetailsScreen> {
       qualification = prefs.getString('qualification') ?? "";
       specification = prefs.getString('specification') ?? "";
       passedOut = prefs.getString('passed_out') ?? "";
+      bloodGroup = prefs.getString('blood_group') ?? "";
+      emergencyName = prefs.getString('emergency_name') ?? "";
+      emergencyNumber = prefs.getString('emergency_number') ?? "";
+      isLoading = false;
     });
+
+    try {
+      final String uid =
+          // prefs.getString('login_cus_id') ??
+          // prefs.get('uid')?.toString() ??
+          "54";
+
+      final String cid =
+          prefs.getString('cid') ?? prefs.getString('cid_str') ?? "21472147";
+      final String token = prefs.getString('token') ?? "";
+      final String deviceId = prefs.getString('device_id') ?? "123456";
+      final String lat = prefs.getDouble('lat')?.toString() ?? "123";
+      final String lng = prefs.getDouble('lng')?.toString() ?? "145";
+
+      debugPrint("FETCHING EMPLOYEE DETAILS FOR UID => $uid");
+      debugPrint("FETCHING EMPLOYEE DETAILS FOR CID => $cid");
+      debugPrint("FETCHING EMPLOYEE DETAILS WITH TOKEN => $token");
+
+      final response = await EmployeeApi.getEmployeeDetails(
+        uid: uid,
+        cid: cid,
+        deviceId: deviceId,
+        lat: lat,
+        lng: lng,
+        token: token,
+      );
+
+      if (response["error"] == true || response["error"] == "true") {
+        debugPrint("EMPLOYEE DETAILS ERROR RESPONSE => $response");
+      }
+
+      if (response["error"] == false || response["error"] == "false") {
+        // Data is already saved in EmployeeApi, but we update the UI
+        final profileData = response["data"] ?? {};
+        if (mounted) {
+          setState(() {
+            userName = profileData["name"]?.toString() ?? userName;
+            dept =
+                profileData["department_name"]?.toString() ??
+                profileData["department"]?.toString() ??
+                dept;
+            employeeType =
+                profileData["employee_type"]?.toString() ?? employeeType;
+            doj = profileData["date_of_joining"]?.toString() ?? doj;
+            dob = profileData["dob"]?.toString() ?? dob;
+            address =
+                profileData["address"]?.toString() ??
+                profileData["current_address"]?.toString() ??
+                address;
+            gender = profileData["gender"]?.toString() ?? gender;
+            mobile = profileData["contact_number"]?.toString() ?? mobile;
+            profilePhoto =
+                profileData["profile_photo"]?.toString() ?? profilePhoto;
+            institutionName =
+                profileData["institution_name"]?.toString() ?? institutionName;
+            qualification =
+                profileData["qualification"]?.toString() ?? qualification;
+            specification =
+                profileData["specification"]?.toString() ?? specification;
+            passedOut = profileData["passed_out"]?.toString() ?? passedOut;
+            bloodGroup = profileData["blood_group"]?.toString() ?? bloodGroup;
+            emergencyName =
+                profileData["emergency_contact_name"]?.toString() ??
+                emergencyName;
+            emergencyNumber =
+                profileData["emergency_contact_number"]?.toString() ??
+                emergencyNumber;
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint("Employee Details Sync Error => $e");
+    }
   }
 
   @override
@@ -282,10 +365,12 @@ class _EmployeeDetailsScreenState extends State<EmployeeDetailsScreen> {
     return Column(
       children: [
         row("Date of Birth", dob),
-        row("Age", "-"),
         row("Gender", gender),
+        row("Blood Group", bloodGroup),
         row("Address", address),
         row("Phone Number", mobile),
+        row("Emergency Name", emergencyName),
+        row("Emergency No", emergencyNumber),
       ],
     );
   }

@@ -1,14 +1,12 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:dotted_border/dotted_border.dart';
 
+import '../../models/leave_api.dart';
 import 'leave_management.dart';
 import 'permission_form.dart';
 
@@ -160,8 +158,6 @@ class _LeaveFormState extends State<LeaveForm> {
   List<String> leaveTypes = [];
   bool isLoading = false;
 
-  static const String baseUrl = "https://erpsmart.in/total/api/m_api/";
-
   @override
   void initState() {
     super.initState();
@@ -180,39 +176,24 @@ class _LeaveFormState extends State<LeaveForm> {
   Future<void> _loadEmployeeId() async {
     final prefs = await SharedPreferences.getInstance();
     employeeTableId =
+        prefs.getString('uid') ??
         prefs.getString('login_cus_id') ??
-        prefs.getString('employee_table_id') ??
-        prefs.getInt('uid')?.toString() ??
-        "";
+        prefs.get('uid')?.toString() ??
+        "54";
 
     debugPrint("LEAVE SCREEN STANDARDIZED UID => $employeeTableId");
     _employeeCompleter.complete();
   }
 
   Future<void> _fetchLeaveTypes() async {
-    final prefs = await SharedPreferences.getInstance();
-    final res = await http.post(
-      Uri.parse(baseUrl),
-      body: {
-        "type": "2044",
-        "cid": prefs.getString('cid') ?? "",
-        "device_id": prefs.getString('device_id') ?? "",
-        "lt": "123",
-        "ln": "123",
-      },
-    );
-
-    if (!mounted) return;
-
-    final data = jsonDecode(res.body);
-    if (data["error"] == false) {
+    try {
+      final types = await LeaveService.getLeaveTypes();
+      if (!mounted) return;
       setState(() {
-        leaveTypes = List<String>.from(
-          data["data"]["leave_types"].map(
-            (e) => e["leave_type_name"].toString(),
-          ),
-        );
+        leaveTypes = types;
       });
+    } catch (e) {
+      debugPrint("Error fetching leave types: $e");
     }
   }
 
@@ -257,90 +238,54 @@ class _LeaveFormState extends State<LeaveForm> {
     setState(() => isLoading = true);
 
     try {
-      final prefs = await SharedPreferences.getInstance();
-      if (employeeTableId == null) {
-        // Try fetch again or fail
-        if (!mounted) return;
-        employeeTableId = prefs.getString("employee_table_id");
-        if (employeeTableId == null) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Employee ID not found. Relogin.')),
-          );
-          setState(() => isLoading = false);
-          return;
-        }
-      }
+      final res = await LeaveService.applyLeave(
+        leaveType: leaveType!,
+        fromDate: _formatDate(fromDate!),
+        toDate: _formatDate(toDate!),
+        reason: reason!,
+      );
 
-      var request = http.MultipartRequest("POST", Uri.parse(baseUrl));
-      request.fields['type'] = '2043';
-      request.fields['cid'] = prefs.getString('cid') ?? "";
-      request.fields['uid'] =
-          employeeTableId!; // Standardized UID (Priority: login_cus_id)
-      request.fields['id'] =
-          employeeTableId!; // Alias for backward compatibility
-      request.fields['leave_type'] = leaveType!;
-      request.fields['leave_start_date'] = _formatDate(fromDate!);
-      request.fields['leave_end_date'] = _formatDate(toDate!);
-      request.fields['reason'] = reason!;
-      request.fields['device_id'] = prefs.getString('device_id') ?? "";
-      request.fields['lt'] = prefs.getDouble('lat')?.toString() ?? "";
-      request.fields['ln'] = prefs.getDouble('lng')?.toString() ?? "";
-
-      if (attachment != null) {
-        request.files.add(
-          await http.MultipartFile.fromPath('attachment', attachment!.path),
-        );
-      }
-
-      var streamedResponse = await request.send();
       if (!mounted) return;
-      var response = await http.Response.fromStream(streamedResponse);
 
-      final data = jsonDecode(response.body);
+      if (res["error"] == false || res["error"] == 'false') {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Success: Leave Applied Successfully'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
+        );
 
-      if (data["error"] == false || data["error"] == 'false') {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Success: Leave Applied Successfully'),
-              backgroundColor: Colors.green,
-              duration: Duration(seconds: 2),
-            ),
-          );
+        // Clear Form
+        _formKey.currentState!.reset();
+        _fromDateController.clear();
+        _toDateController.clear();
+        setState(() {
+          leaveType = null;
+          fromDate = null;
+          toDate = null;
+          reason = null;
+          attachment = null;
+        });
 
-          // Clear Form
-          _formKey.currentState!.reset();
-          _fromDateController.clear();
-          _toDateController.clear();
-          setState(() {
-            leaveType = null;
-            fromDate = null;
-            toDate = null;
-            reason = null;
-            attachment = null;
-          });
-
-          // Navigate to Leave Management Screen
-          Future.delayed(const Duration(seconds: 1), () {
-            if (mounted) {
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const LeaveManagementScreen(),
-                ),
-              );
-            }
-          });
-        }
+        // Navigate to Leave Management Screen
+        Future.delayed(const Duration(seconds: 1), () {
+          if (mounted) {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const LeaveManagementScreen(),
+              ),
+            );
+          }
+        });
       } else {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(data["error_msg"] ?? 'Failed to apply leave'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(res["error_msg"] ?? 'Failed to apply leave'),
+            backgroundColor: Colors.red,
+          ),
+        );
       }
     } catch (e) {
       if (mounted) {

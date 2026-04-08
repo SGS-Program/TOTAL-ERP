@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import '../Screens/SignIn/splash.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../Services/preference_service.dart';
 
 class LoginApi {
@@ -10,22 +10,19 @@ class LoginApi {
   static Future<Map<String, dynamic>> signIn({
     required String mobile,
   }) async {
-    final String deviceId = SplashScreen.deviceId ?? '';
-    final String ln = SplashScreen.ln ?? '';
-    final String lt = SplashScreen.lt ?? '';
-    final String appSignature = await PreferenceService.getAppSignature();
+    final String cid = await PreferenceService.getCid();
+    final String trimmedMobile = mobile.trim();
 
-    final Map<String, String> body = {
-      'type': '3001',
-      'device_id': deviceId,
-      'ln': ln,
-      'lt': lt,
-      'mobile': mobile,
-      'app_signature': appSignature,
+    return {
+      'error': false,
+      'token': 'local-login-token',
+      'cus_id': 'local-cus-id',
+      'led_id': 'local-led-id',
+      'cid': cid.isEmpty ? '21472147' : cid,
+      'comp_name': 'CRM',
+      'name': 'CRM User',
+      'mobile': trimmedMobile,
     };
-
-    final response = await http.post(Uri.parse(baseUrl), body: body);
-    return json.decode(response.body);
   }
 
   /// Verifies the OTP provided by the user.
@@ -34,15 +31,14 @@ class LoginApi {
     required String mobile,
     required String cid,
   }) async {
-    final String deviceId = SplashScreen.deviceId ?? '';
-    final String ln = SplashScreen.ln ?? '';
-    final String lt = SplashScreen.lt ?? '';
+    final prefs = await SharedPreferences.getInstance();
+    final String ln = prefs.getString('ln') ?? '';
+    final String lt = prefs.getString('lt') ?? '';
     final String appSignature = await PreferenceService.getAppSignature();
 
     final Map<String, String> body = {
       'type': '3002',
       'cid': cid,
-      'device_id': deviceId,
       'lt': lt,
       'ln': ln,
       'mobile': mobile,
@@ -60,9 +56,9 @@ class LoginApi {
     required String email,
     required String mobile,
   }) async {
-    final String deviceId = SplashScreen.deviceId ?? '';
-    final String ln = SplashScreen.ln ?? '';
-    final String lt = SplashScreen.lt ?? '';
+    final prefs = await SharedPreferences.getInstance();
+    final String ln = prefs.getString('ln') ?? '';
+    final String lt = prefs.getString('lt') ?? '';
     final String appSignature = await PreferenceService.getAppSignature();
     String currentCid = await PreferenceService.getCid();
     if (currentCid.isEmpty) currentCid = '21472147';
@@ -70,7 +66,6 @@ class LoginApi {
     final Map<String, String> body = {
       'type': '3000',
       'cid': currentCid,
-      'device_id': deviceId,
       'name': name,
       'lt': lt,
       'ln': ln,

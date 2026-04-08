@@ -7,19 +7,88 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class RequestApprovals extends StatefulWidget {
+  // Static Cache to store data for instant loading
+  static List<dynamic> cachedApprovals = [];
+  static Map<String, String> cachedUserMap = {};
+  static bool hasCachedData = false;
+  static bool isPreFetching = false;
+
+  static const String apiUrl = 'https://erpsmart.in/total/api/m_api/';
+
   const RequestApprovals({super.key});
+
+  // Pre-fetch method to be called from Dashboard or background
+  static Future<void> preFetch() async {
+    if (isPreFetching) return;
+    isPreFetching = true;
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final cid = prefs.getString('cid') ?? '44555666';
+
+      // Fetch users and PR data in parallel
+      final results = await Future.wait([
+        http.post(
+          Uri.parse(apiUrl),
+          body: {
+            'type': '5001',
+            'cid': cid,
+            'device_id': '123',
+            'ln': '123',
+            'lt': '34',
+          },
+        ),
+        http.post(
+          Uri.parse(apiUrl),
+          body: {
+            'type': '4006',
+            'cid': cid,
+            'device_id': '123',
+            'ln': '123',
+            'lt': '34',
+          },
+        ),
+      ]);
+
+      final userResponse = results[0];
+      final prResponse = results[1];
+
+      if (userResponse.statusCode == 200) {
+        final jsonResponse = json.decode(userResponse.body);
+        if (jsonResponse['error'] == false ||
+            jsonResponse['error']?.toString().toLowerCase() == 'false') {
+          final users = jsonResponse['data'];
+          cachedUserMap.clear();
+          for (var user in users) {
+            cachedUserMap[user['id'].toString()] = user['name'].toString();
+          }
+        }
+      }
+
+      if (prResponse.statusCode == 200) {
+        final jsonResponse = json.decode(prResponse.body);
+        if (jsonResponse['error'] == false ||
+            jsonResponse['error']?.toString().toLowerCase() == 'false') {
+          cachedApprovals = jsonResponse['data'] ?? [];
+          hasCachedData = true;
+        }
+      }
+    } catch (e) {
+      debugPrint("Pre-fetch error: $e");
+    } finally {
+      isPreFetching = false;
+    }
+  }
 
   @override
   State<RequestApprovals> createState() => _RequestApprovalsState();
 }
 
 class _RequestApprovalsState extends State<RequestApprovals> {
-  List<dynamic> approvals = [];
-  Map<String, String> userMap = {};
-  bool isLoading = true;
+  List<dynamic> approvals = List.from(RequestApprovals.cachedApprovals);
+  Map<String, String> userMap = Map.from(RequestApprovals.cachedUserMap);
+  bool isLoading = !RequestApprovals.hasCachedData; // Only load if no cache
   String errorMessage = '';
-
-  final String apiUrl = 'https://erpsmart.in/total/api/m_api/';
 
   @override
   void initState() {
@@ -28,25 +97,36 @@ class _RequestApprovalsState extends State<RequestApprovals> {
   }
 
   Future<void> loadData() async {
-    await fetchUsers(); // first load users
-    await fetchPRData();
+    // If we have no data, show loader
+    if (approvals.isEmpty) {
+      if (mounted) {
+        setState(() {
+          isLoading = true;
+        });
+      }
+    }
+
+    // Refresh data in background
+    try {
+      await Future.wait([fetchUsers(), fetchPRData()]);
+    } catch (e) {
+      debugPrint("Load data error: $e");
+    } finally {
+      if (mounted) {
+        setState(() {
+          isLoading = false;
+        });
+      }
+    }
   }
 
   Future<void> fetchPRData() async {
-    if (!mounted) return;
-    setState(() {
-      isLoading = true;
-      errorMessage = '';
-    });
-
     try {
       final prefs = await SharedPreferences.getInstance();
-      final cid =
-          prefs.getString('cid') ??
-          '44555666'; // Fallback to sample if not found
+      final cid = prefs.getString('cid') ?? '44555666';
 
       final response = await http.post(
-        Uri.parse(apiUrl),
+        Uri.parse(RequestApprovals.apiUrl),
         body: {
           'type': '4006',
           'cid': cid,
@@ -62,30 +142,35 @@ class _RequestApprovalsState extends State<RequestApprovals> {
         if (jsonResponse['error'] == false ||
             jsonResponse['error']?.toString().toLowerCase() == 'false') {
           if (!mounted) return;
+          final newData = jsonResponse['data'] ?? [];
           setState(() {
-            approvals = jsonResponse['data'] ?? [];
-            isLoading = false;
+            approvals = newData;
+            RequestApprovals.cachedApprovals = newData;
+            RequestApprovals.hasCachedData = true;
           });
         } else {
-          if (!mounted) return;
-          setState(() {
-            errorMessage = jsonResponse['message'] ?? 'Failed to fetch data';
-            isLoading = false;
-          });
+          if (approvals.isEmpty) {
+            if (!mounted) return;
+            setState(() {
+              errorMessage = jsonResponse['message'] ?? 'Failed to fetch data';
+            });
+          }
         }
       } else {
-        if (!mounted) return;
-        setState(() {
-          errorMessage = 'Server error: ${response.statusCode}';
-          isLoading = false;
-        });
+        if (approvals.isEmpty) {
+          if (!mounted) return;
+          setState(() {
+            errorMessage = 'Server error: ${response.statusCode}';
+          });
+        }
       }
     } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        errorMessage = 'Network error: $e';
-        isLoading = false;
-      });
+      if (approvals.isEmpty) {
+        if (!mounted) return;
+        setState(() {
+          errorMessage = 'Network error: $e';
+        });
+      }
     }
   }
 
@@ -95,7 +180,7 @@ class _RequestApprovalsState extends State<RequestApprovals> {
       final cid = prefs.getString('cid') ?? '44555666';
 
       final response = await http.post(
-        Uri.parse(apiUrl),
+        Uri.parse(RequestApprovals.apiUrl),
         body: {
           'type': '5001',
           'cid': cid,
@@ -112,18 +197,17 @@ class _RequestApprovalsState extends State<RequestApprovals> {
             jsonResponse['error']?.toString().toLowerCase() == 'false') {
           final users = jsonResponse['data'];
 
+          userMap.clear();
           for (var user in users) {
             final id = user['id'].toString();
             final name = user['name'].toString();
-
             userMap[id] = name;
           }
-
-          print("UserMap: $userMap");
+          RequestApprovals.cachedUserMap = Map.from(userMap);
         }
       }
     } catch (e) {
-      print("User fetch error: $e");
+      debugPrint("User fetch error: $e");
     }
   }
 
@@ -249,6 +333,9 @@ class _RequestApprovalsState extends State<RequestApprovals> {
 
                           final prNumber = master['no']?.toString() ?? 'N/A';
                           final qty =
+                              master['current_order_quantity']?.toString() ??
+                              displayItem['current_order_quantity']
+                                  ?.toString() ??
                               master['quantity_required']?.toString() ??
                               displayItem['quantity_required']?.toString() ??
                               '0';
@@ -298,7 +385,15 @@ class _RequestApprovalsState extends State<RequestApprovals> {
     int total = 0;
     for (var item in approvals) {
       final master = item['master'] ?? {};
-      final qtyStr = master['quantity_required']?.toString() ?? '0';
+      final itemsList = item['items'] ?? [];
+      final displayItem = itemsList.isNotEmpty ? itemsList[0] : {};
+
+      final qtyStr =
+          master['current_order_quantity']?.toString() ??
+          displayItem['current_order_quantity']?.toString() ??
+          master['quantity_required']?.toString() ??
+          displayItem['quantity_required']?.toString() ??
+          '0';
       total += int.tryParse(qtyStr) ?? 0;
     }
     return total;

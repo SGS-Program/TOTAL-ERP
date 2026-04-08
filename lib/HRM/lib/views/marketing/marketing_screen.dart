@@ -77,7 +77,7 @@ class _MarketingScreenState extends State<MarketingScreen> {
           prefs.getString('login_cus_id') ??
           prefs.getString('server_uid') ??
           prefs.getString('employee_table_id') ??
-          prefs.getInt('uid')?.toString() ??
+          prefs.get('uid')?.toString() ??
           "0";
       final String token = prefs.getString('token') ?? "";
       final String lat = prefs.getDouble('lat')?.toString() ?? "145";
@@ -182,7 +182,7 @@ class _MarketingScreenState extends State<MarketingScreen> {
           prefs.getString('login_cus_id') ??
           prefs.getString('server_uid') ??
           prefs.getString('employee_table_id') ??
-          prefs.getInt('uid')?.toString() ??
+          prefs.get('uid')?.toString() ??
           "2";
 
       final String cid = prefs.getString('cid') ?? "21472147";

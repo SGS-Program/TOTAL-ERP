@@ -2,8 +2,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:crm/Services/profile_service.dart';
-import 'package:crm/Screens/SignIn/splash.dart';
 import 'package:crm/Services/preference_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class AccountSettingScreen extends StatefulWidget {
   final bool isEditing;
@@ -53,6 +53,7 @@ class _AccountSettingScreenState extends State<AccountSettingScreen> {
     final profileData = await ProfileService.fetchProfileData();
 
     if (mounted) {
+      final prefs = await SharedPreferences.getInstance();
       setState(() {
         if (profileData != null) {
           _nameController.text =
@@ -63,8 +64,8 @@ class _AccountSettingScreenState extends State<AccountSettingScreen> {
               profileData['mobile']?.toString() ?? _phoneController.text;
         }
 
-        String lt = SplashScreen.lt ?? '';
-        String ln = SplashScreen.ln ?? '';
+        String lt = prefs.getString('lt') ?? '';
+        String ln = prefs.getString('ln') ?? '';
         if (lt.isNotEmpty && ln.isNotEmpty) {
           _locationController.text = "$lt, $ln";
         }

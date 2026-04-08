@@ -1,8 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
 
 class MainDrawer extends StatelessWidget {
   const MainDrawer({super.key});
+
+  Future<Map<String, String>> _getUserData() async {
+    final prefs = await SharedPreferences.getInstance();
+    return {
+      'name': prefs.getString('name') ?? 'Smart ERP User',
+      'email': prefs.getString('employee_code') ?? 'User ID: ${prefs.getString('uid') ?? "N/A"}',
+      'profile_photo': prefs.getString('profile_photo') ?? '',
+    };
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -12,7 +23,13 @@ class MainDrawer extends StatelessWidget {
       backgroundColor: Colors.white,
       child: Column(
         children: [
-          _buildHeader(context, tealColor),
+          FutureBuilder<Map<String, String>>(
+            future: _getUserData(),
+            builder: (context, snapshot) {
+              final data = snapshot.data ?? {'name': 'Loading...', 'email': '', 'profile_photo': ''};
+              return _buildHeader(context, tealColor, data['name']!, data['email']!, data['profile_photo']!);
+            },
+          ),
           Expanded(
             child: ListView(
               padding: EdgeInsets.zero,
@@ -64,7 +81,7 @@ class MainDrawer extends StatelessWidget {
     );
   }
 
-  Widget _buildHeader(BuildContext context, Color tealColor) {
+  Widget _buildHeader(BuildContext context, Color tealColor, String name, String email, String photo) {
     return Container(
       padding: const EdgeInsets.only(top: 60, bottom: 30, left: 24, right: 24),
       decoration: BoxDecoration(
@@ -78,10 +95,11 @@ class MainDrawer extends StatelessWidget {
               color: Colors.white,
               shape: BoxShape.circle,
             ),
-            child: const CircleAvatar(
+            child: CircleAvatar(
               radius: 28,
-              backgroundColor: Color(0xFFE0F2F1),
-              child: Icon(Icons.person_rounded, color: Color(0xFF26A69A), size: 36),
+              backgroundColor: const Color(0xFFE0F2F1),
+              backgroundImage: photo.isNotEmpty ? NetworkImage(photo) : null,
+              child: photo.isEmpty ? const Icon(Icons.person_rounded, color: Color(0xFF26A69A), size: 36) : null,
             ),
           ),
           const SizedBox(width: 16),
@@ -90,7 +108,7 @@ class MainDrawer extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Smart ERP Admin',
+                  name,
                   style: GoogleFonts.outfit(
                     fontSize: 18,
                     fontWeight: FontWeight.w900,
@@ -98,7 +116,7 @@ class MainDrawer extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  'admin@sgs-erp.com',
+                  email,
                   style: GoogleFonts.outfit(
                     fontSize: 12,
                     color: Colors.white.withValues(alpha: 0.8),

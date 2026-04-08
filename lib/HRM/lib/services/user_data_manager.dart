@@ -8,15 +8,8 @@ class UserDataManager {
   // Helper to get current user ID
   static Future<String?> _getCurrentUserId() async {
     final prefs = await SharedPreferences.getInstance();
-    // Assuming 'uid' is stored as int based on usage in other files
-    int? uidInt = prefs.getInt('uid');
-    if (uidInt != null && uidInt != 0) return uidInt.toString();
-
-    // Fallback if stored as string
-    String? uidStr = prefs.getString('uid');
-    if (uidStr != null && uidStr.isNotEmpty && uidStr != "0") return uidStr;
-
-    return null;
+    final uid = prefs.get('uid');
+    return uid?.toString();
   }
 
   /// Retrieves a list of maps for the current user

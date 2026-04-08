@@ -1,4 +1,5 @@
 import 'package:crm/Screens/Meeting/meeting_screen.dart';
+import 'package:crm_admin_app/Screens/dashboard_screen.dart' as admin_app;
 import 'package:flutter/material.dart';
 import 'package:crm/Screens/Reports/report_screen.dart';
 import 'package:crm/Services/profile_service.dart';
@@ -349,6 +350,23 @@ class _DrawerScreenState extends State<DrawerScreen> {
                     ),
                   ),
                 ],
+                _buildDivider(),
+                _buildDrawerItem(
+                  icon: const Icon(
+                    Icons.admin_panel_settings_outlined,
+                    color: Color(0xFF26A69A),
+                  ),
+                  title: 'CRM Admin',
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const admin_app.DashboardScreen(),
+                      ),
+                    );
+                  },
+                ),
                 _buildDivider(),
                 _buildDrawerItem(
                   icon: Image.asset(
